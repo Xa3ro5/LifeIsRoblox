@@ -302,58 +302,78 @@ function Library:CreateWindow(title)
             )
         end
 
+        -- SLIDER
         function Elements:Slider(text, min, max, default, callback)
-            local Value = default or min
+            min = min or 0
+            max = max or 100
+            default = default or min
 
-            local Holder = Instance.new("Frame")
-            Holder.Size = UDim2.new(1, 0, 0, 40)
-            Holder.BackgroundTransparency = 1
-            Holder.Parent = FolderFrame
+            local SliderFrame = Instance.new("Frame")
+            SliderFrame.Size = UDim2.new(1, 0, 0, 40)
+            SliderFrame.BackgroundTransparency = 1
+            SliderFrame.Parent = FolderFrame
 
             local Label = Instance.new("TextLabel")
-            Label.Text = text .. " : " .. Value
-            Label.Size = UDim2.new(1, 0, 0, 20)
+            Label.Size = UDim2.new(1, 0, 0, 15)
             Label.BackgroundTransparency = 1
             Label.TextColor3 = Color3.new(1, 1, 1)
-            Label.Parent = Holder
+            Label.Font = Enum.Font.SourceSans
+            Label.TextSize = 16
+            Label.Text = text .. " : " .. tostring(default)
+            Label.Parent = SliderFrame
 
             local Bar = Instance.new("Frame")
             Bar.Size = UDim2.new(1, 0, 0, 10)
-            Bar.Position = UDim2.new(0, 0, 0, 25)
+            Bar.Position = UDim2.new(0, 0, 0, 22)
             Bar.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-            Bar.Parent = Holder
+            Bar.BorderSizePixel = 0
+            Bar.Parent = SliderFrame
 
             local Fill = Instance.new("Frame")
-            Fill.Size = UDim2.new((Value - min) / (max - min), 0, 1, 0)
+            Fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
             Fill.BackgroundColor3 = Color3.fromRGB(120, 120, 120)
+            Fill.BorderSizePixel = 0
             Fill.Parent = Bar
 
             local dragging = false
+            local value = default
 
-            Bar.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    dragging = true
+            local function SetValue(x)
+                local percent = math.clamp((x - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
+                value = math.floor(min + (max - min) * percent)
+
+                Fill.Size = UDim2.new(percent, 0, 1, 0)
+                Label.Text = text .. " : " .. tostring(value)
+
+                if Alive and callback then
+                    callback(value)
                 end
-            end)
+            end
 
-            UIS.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    dragging = false
-                end
-            end)
-
-            UIS.InputChanged:Connect(function(input)
-                if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-                    local percent = (Mouse.X - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X
-                    percent = math.clamp(percent, 0, 1)
-                    Value = math.floor(min + (max - min) * percent)
-                    Fill.Size = UDim2.new(percent, 0, 1, 0)
-                    Label.Text = text .. " : " .. Value
-                    if Alive and callback then
-                        callback(Value)
+            table.insert(Connections,
+                Bar.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                        dragging = true
+                        SetValue(input.Position.X)
                     end
-                end
-            end)
+                end)
+            )
+
+            table.insert(Connections,
+                UIS.InputChanged:Connect(function(input)
+                    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                        SetValue(input.Position.X)
+                    end
+                end)
+            )
+
+            table.insert(Connections,
+                UIS.InputEnded:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                        dragging = false
+                    end
+                end)
+            )
         end
 
         function Elements:Textbox(text, callback)
