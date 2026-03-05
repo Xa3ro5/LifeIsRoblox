@@ -302,6 +302,60 @@ function Library:CreateWindow(title)
             )
         end
 
+        function Elements:Slider(text, min, max, default, callback)
+            local Value = default or min
+
+            local Holder = Instance.new("Frame")
+            Holder.Size = UDim2.new(1, 0, 0, 40)
+            Holder.BackgroundTransparency = 1
+            Holder.Parent = FolderFrame
+
+            local Label = Instance.new("TextLabel")
+            Label.Text = text .. " : " .. Value
+            Label.Size = UDim2.new(1, 0, 0, 20)
+            Label.BackgroundTransparency = 1
+            Label.TextColor3 = Color3.new(1, 1, 1)
+            Label.Parent = Holder
+
+            local Bar = Instance.new("Frame")
+            Bar.Size = UDim2.new(1, 0, 0, 10)
+            Bar.Position = UDim2.new(0, 0, 0, 25)
+            Bar.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+            Bar.Parent = Holder
+
+            local Fill = Instance.new("Frame")
+            Fill.Size = UDim2.new((Value - min) / (max - min), 0, 1, 0)
+            Fill.BackgroundColor3 = Color3.fromRGB(120, 120, 120)
+            Fill.Parent = Bar
+
+            local dragging = false
+
+            Bar.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    dragging = true
+                end
+            end)
+
+            UIS.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    dragging = false
+                end
+            end)
+
+            UIS.InputChanged:Connect(function(input)
+                if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                    local percent = (Mouse.X - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X
+                    percent = math.clamp(percent, 0, 1)
+                    Value = math.floor(min + (max - min) * percent)
+                    Fill.Size = UDim2.new(percent, 0, 1, 0)
+                    Label.Text = text .. " : " .. Value
+                    if Alive and callback then
+                        callback(Value)
+                    end
+                end
+            end)
+        end
+
         function Elements:Textbox(text, callback)
             local Box = Instance.new("TextBox")
             Box.PlaceholderText = text
