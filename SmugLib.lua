@@ -174,73 +174,13 @@ function Library:CreateWindow(title)
     TabContent.Parent = Body
     Padding(TabContent, 6)
 
-    -- Resizable with min/max
-    local Resize = Instance.new("Frame")
-    Resize.Size = UDim2.new(0, 16, 0, 16)
-    Resize.Position = UDim2.new(1, -16, 1, -16)
-    Resize.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-    Resize.Parent = Main
-    Round(Resize, 4)
-
-    local resizing = false
-    local startSize
-    local startPos
-
-    Resize.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            resizing = true
-            startPos = input.Position
-            startSize = Main.Size
-        end
-    end)
-    UIS.InputEnded:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 then
-            resizing = false
-        end
-    end)
-    UIS.InputChanged:Connect(function(i)
-        if resizing then
-            local delta = i.Position - startPos
-            local newX = math.clamp(startSize.X.Offset + delta.X, 400, 900)
-            local newY = math.clamp(startSize.Y.Offset + delta.Y, 300, 700)
-            Main.Size = UDim2.new(0, newX, 0, newY)
-        end
-    end)
-
-    -- Dragging
-    local dragging = false
-    local dragStart
-    local startPos2
-    Top.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos2 = Main.Position
-        end
-    end)
-    UIS.InputChanged:Connect(function(input)
-        if dragging then
-            local delta = input.Position - dragStart
-            Main.Position = UDim2.new(
-                startPos2.X.Scale,
-                startPos2.X.Offset + delta.X,
-                startPos2.Y.Scale,
-                startPos2.Y.Offset + delta.Y
-            )
-        end
-    end)
-    UIS.InputEnded:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end)
-
     -- Tabs & Folders
     local Tabs = {}
     local CurrentTab = nil
     local Window = {}
 
     function Window:Folder(name)
+        -- Tab Button
         local TabButton = Instance.new("TextButton")
         TabButton.Size = UDim2.new(0, 100, 1, 0)
         TabButton.Text = name
@@ -251,25 +191,37 @@ function Library:CreateWindow(title)
         TabButton.Parent = TabBar
         Round(TabButton, 6)
 
+        -- Folder Frame (Scrollable)
         local FolderFrame = Instance.new("ScrollingFrame")
         FolderFrame.Size = UDim2.new(1, 0, 1, 0)
         FolderFrame.Position = UDim2.new(0, 0, 0, 0)
         FolderFrame.BackgroundTransparency = 1
         FolderFrame.Visible = false
-        FolderFrame.Parent = TabContent
         FolderFrame.ScrollBarThickness = 8
-        FolderFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y -- <-- automatically adjust CanvasSize
-        FolderFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-
+        FolderFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        FolderFrame.Parent = TabContent
         Padding(FolderFrame, 4)
 
         local Layout = Instance.new("UIListLayout")
         Layout.Padding = UDim.new(0, 8)
         Layout.SortOrder = Enum.SortOrder.LayoutOrder
         Layout.Parent = FolderFrame
+
+        -- Auto-update CanvasSize
         Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
             FolderFrame.CanvasSize = UDim2.new(0, 0, 0, Layout.AbsoluteContentSize.Y + 4)
         end)
+
+        Tabs[TabButton] = FolderFrame
+        TabButton.MouseButton1Click:Connect(function()
+            if CurrentTab then Tabs[CurrentTab].Visible = false end
+            FolderFrame.Visible = true
+            CurrentTab = TabButton
+        end)
+        if not CurrentTab then
+            FolderFrame.Visible = true
+            CurrentTab = TabButton
+        end
 
         local Elements = {}
 
@@ -441,7 +393,7 @@ function Library:CreateWindow(title)
             DropLayout.Padding = UDim.new(0, 4)
             DropLayout.Parent = DropScroll
 
-            for i, opt in pairs(options) do
+            for _, opt in pairs(options) do
                 local Btn = Instance.new("TextButton")
                 Btn.Text = opt
                 Btn.Size = UDim2.new(1, 0, 0, 30)
