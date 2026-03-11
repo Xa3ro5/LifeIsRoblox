@@ -573,6 +573,86 @@ function Library:CreateWindow(title, options)
             }
         end
 
+        function elements:Checkbox(text, callback, defaultState)
+            local state = defaultState == true
+            local displayText = tostring(text or "Checkbox")
+
+            local row = Instance.new("Frame")
+            row.Size = UDim2.new(1, 0, 0, 28)
+            row.BackgroundTransparency = 1
+            row.BorderSizePixel = 0
+            row.Parent = folderFrame
+
+            local box = Instance.new("TextButton")
+            box.Size = UDim2.new(0, 22, 0, 22)
+            box.Position = UDim2.new(0, 0, 0, 3)
+            box.BackgroundColor3 = state and Color3.fromRGB(76, 132, 76) or Color3.fromRGB(60, 60, 60)
+            box.TextColor3 = Color3.new(1, 1, 1)
+            box.Font = Enum.Font.GothamBold
+            box.TextSize = 14
+            box.BorderSizePixel = 0
+            box.Parent = row
+            round(box, 5)
+
+            local labelButton = Instance.new("TextButton")
+            labelButton.Size = UDim2.new(1, -30, 1, 0)
+            labelButton.Position = UDim2.new(0, 30, 0, 0)
+            labelButton.BackgroundTransparency = 1
+            labelButton.TextXAlignment = Enum.TextXAlignment.Left
+            labelButton.TextColor3 = Color3.new(1, 1, 1)
+            labelButton.Font = Enum.Font.Gotham
+            labelButton.TextSize = 14
+            labelButton.Text = displayText
+            labelButton.BorderSizePixel = 0
+            labelButton.AutoButtonColor = false
+            labelButton.Parent = row
+
+            local function updateVisual()
+                box.Text = state and "X" or ""
+                box.BackgroundColor3 = state and Color3.fromRGB(76, 132, 76) or Color3.fromRGB(60, 60, 60)
+            end
+
+            local function setState(newState, triggerCallback)
+                state = not not newState
+                updateVisual()
+                if triggerCallback and callback then
+                    callback(state)
+                end
+            end
+
+            updateVisual()
+
+            connect(box.MouseButton1Click, function()
+                if not alive then
+                    return
+                end
+                setState(not state, true)
+            end)
+
+            connect(labelButton.MouseButton1Click, function()
+                if not alive then
+                    return
+                end
+                setState(not state, true)
+            end)
+
+            return {
+                Set = function(_, newState)
+                    setState(newState, false)
+                end,
+                Get = function()
+                    return state
+                end,
+                SetText = function(_, newText)
+                    displayText = tostring(newText or "Checkbox")
+                    labelButton.Text = displayText
+                end,
+                Destroy = function()
+                    row:Destroy()
+                end,
+            }
+        end
+
         function elements:Slider(text, minValue, maxValue, defaultValue, callback, step)
             minValue = tonumber(minValue) or 0
             maxValue = tonumber(maxValue) or 100
