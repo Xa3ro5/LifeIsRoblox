@@ -69,6 +69,7 @@ function Library:CreateWindow(title, options)
     local width = options.Width or 520
     local height = options.Height or 380
     local toggleKey = options.ToggleKey or Enum.KeyCode.RightShift
+    local onClose = options.OnClose
 
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "SmugLibCore"
@@ -302,6 +303,9 @@ function Library:CreateWindow(title, options)
             return
         end
         alive = false
+        if onClose then
+            pcall(onClose)
+        end
         disconnectAll()
         if screenGui then
             screenGui:Destroy()
@@ -385,6 +389,10 @@ function Library:CreateWindow(title, options)
 
     function window:Destroy()
         destroyWindow()
+    end
+
+    function window:SetOnClose(callback)
+        onClose = callback
     end
 
     function window:Folder(name)
