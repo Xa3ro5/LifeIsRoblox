@@ -5,6 +5,7 @@ Library.__index = Library
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
+local HttpService = game:GetService("HttpService")
 
 -- Helpers
 local function round(obj, radius)
@@ -70,6 +71,79 @@ function Library:CreateWindow(title, options)
     local height = options.Height or 380
     local toggleKey = options.ToggleKey or Enum.KeyCode.RightShift
     local onClose = options.OnClose
+
+    local function canPersist()
+        return HttpService and type(readfile) == "function" and type(writefile) == "function"
+    end
+
+    local configAutoSave = options.ConfigAutoSave ~= false
+    local configKey = tostring(options.ConfigKey or title or "SmugLib")
+    configKey = configKey:gsub("[^%w_%-]", "_")
+    local configFile = "SmugLib_" .. configKey .. ".json"
+    local configData = {}
+    local configBindings = {}
+    local applyingConfig = false
+
+    local function loadConfig()
+        if not canPersist() then
+            return
+        end
+        local raw = nil
+        if type(isfile) == "function" then
+            if isfile(configFile) then
+                local ok, data = pcall(readfile, configFile)
+                if ok then
+                    raw = data
+                end
+            end
+        else
+            local ok, data = pcall(readfile, configFile)
+            if ok then
+                raw = data
+            end
+        end
+        if raw and raw ~= "" then
+            local ok, decoded = pcall(function()
+                return HttpService:JSONDecode(raw)
+            end)
+            if ok and type(decoded) == "table" then
+                configData = decoded
+            end
+        end
+    end
+
+    local function saveConfig(force)
+        if not canPersist() then
+            return
+        end
+        if not force and not configAutoSave then
+            return
+        end
+        local ok, encoded = pcall(function()
+            return HttpService:JSONEncode(configData)
+        end)
+        if ok and encoded then
+            pcall(function()
+                writefile(configFile, encoded)
+            end)
+        end
+    end
+
+    local function applyConfigData(useDefaults)
+        applyingConfig = true
+        for key, binding in pairs(configBindings) do
+            local value = configData[key]
+            if value == nil and useDefaults then
+                value = binding.default
+            end
+            if value ~= nil then
+                binding.set(value, true)
+            end
+        end
+        applyingConfig = false
+    end
+
+    loadConfig()
 
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "SmugLibCore"
@@ -395,10 +469,93 @@ function Library:CreateWindow(title, options)
         onClose = callback
     end
 
+    function window:GetConfig()
+        return configData
+    end
+
+    function window:SetConfig(data, applyNow)
+        if type(data) ~= "table" then
+            return false
+        end
+        configData = data
+        if applyNow ~= false then
+            applyConfigData(false)
+        end
+        saveConfig(true)
+        return true
+    end
+
+    function window:LoadConfig()
+        loadConfig()
+        applyConfigData(false)
+        return true
+    end
+
+    function window:SaveConfig()
+        saveConfig(true)
+        return true
+    end
+
+    function window:ClearConfig()
+        configData = {}
+        saveConfig(true)
+        applyConfigData(true)
+        return true
+    end
+
+    function window:ExportConfig()
+        local ok, encoded = pcall(function()
+            return HttpService:JSONEncode(configData)
+        end)
+        if ok then
+            return encoded
+        end
+        return nil
+    end
+
+    function window:ImportConfig(jsonString, applyNow)
+        if type(jsonString) ~= "string" then
+            return false
+        end
+        local ok, decoded = pcall(function()
+            return HttpService:JSONDecode(jsonString)
+        end)
+        if ok and type(decoded) == "table" then
+            configData = decoded
+            if applyNow ~= false then
+                applyConfigData(false)
+            end
+            saveConfig(true)
+            return true
+        end
+        return false
+    end
+
+    function window:SetConfigKey(newKey, keepCurrent)
+        if not newKey or newKey == "" then
+            return false
+        end
+        local nextKey = tostring(newKey):gsub("[^%w_%-]", "_")
+        if nextKey == configKey then
+            return true
+        end
+        configKey = nextKey
+        configFile = "SmugLib_" .. configKey .. ".json"
+        if keepCurrent then
+            saveConfig(true)
+        else
+            configData = {}
+            loadConfig()
+            applyConfigData(false)
+        end
+        return true
+    end
+
     function window:Folder(name)
+        local folderName = tostring(name or "Tab")
         local tabButton = Instance.new("TextButton")
         tabButton.Size = UDim2.new(0, 110, 1, 0)
-        tabButton.Text = tostring(name or "Tab")
+        tabButton.Text = folderName
         tabButton.Font = Enum.Font.Gotham
         tabButton.TextSize = 14
         tabButton.TextColor3 = Color3.new(1, 1, 1)
@@ -582,8 +739,10 @@ function Library:CreateWindow(title, options)
         end
 
         function elements:Checkbox(text, callback, defaultState)
-            local state = defaultState == true
             local displayText = tostring(text or "Checkbox")
+            local configKeyName = string.format("checkbox:%s:%s", folderName, displayText)
+            local savedState = configData[configKeyName]
+            local state = savedState ~= nil and (savedState == true) or (defaultState == true)
 
             local row = Instance.new("Frame")
             row.Size = UDim2.new(1, 0, 0, 28)
@@ -623,12 +782,23 @@ function Library:CreateWindow(title, options)
             local function setState(newState, triggerCallback)
                 state = not not newState
                 updateVisual()
+                configData[configKeyName] = state
+                if not applyingConfig then
+                    saveConfig(false)
+                end
                 if triggerCallback and callback then
                     callback(state)
                 end
             end
 
             updateVisual()
+            configBindings[configKeyName] = {
+                set = setState,
+                default = defaultState == true,
+            }
+            if savedState ~= nil and callback then
+                callback(state)
+            end
 
             connect(box.MouseButton1Click, function()
                 if not alive then
