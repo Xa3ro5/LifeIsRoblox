@@ -473,6 +473,14 @@ function Library:CreateWindow(title, options)
         return configData
     end
 
+    function window:GetConfigInfo()
+        return {
+            File = configFile,
+            Key = configKey,
+            AutoSave = configAutoSave,
+        }
+    end
+
     function window:SetConfig(data, applyNow)
         if type(data) ~= "table" then
             return false
