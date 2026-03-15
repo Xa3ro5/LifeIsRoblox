@@ -200,18 +200,6 @@ local function getControlModule()
     local playerScripts = LocalPlayer and LocalPlayer:FindFirstChild("PlayerScripts")
     local playerModule = playerScripts and playerScripts:FindFirstChild("PlayerModule")
     if playerModule then
-        if playerModule:IsA("ModuleScript") then
-            local ok, pm = pcall(require, playerModule)
-            if ok and pm and type(pm.GetControls) == "function" then
-                local okControls, controls = pcall(function()
-                    return pm:GetControls()
-                end)
-                if okControls and controls then
-                    controlModuleCache = controls
-                    return controlModuleCache
-                end
-            end
-        end
         local controlModule = playerModule:FindFirstChild("ControlModule", true)
         if controlModule and controlModule:IsA("ModuleScript") then
             local okControl, controls = pcall(require, controlModule)
