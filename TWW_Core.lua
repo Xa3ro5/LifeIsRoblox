@@ -31,6 +31,12 @@ pcall(function()
     end
 end)
 
+local TweenService = Services.TweenService
+if not TweenService then
+    TweenService = game:GetService("TweenService")
+    Services.TweenService = TweenService
+end
+
 local LocalPlayer = TWW.LocalPlayer or Services.Players.LocalPlayer
 TWW.LocalPlayer = LocalPlayer
 
@@ -950,7 +956,208 @@ local function setScopeHideEnabled(state)
     update()
 end
 
-local function disableAllEsp()
+local tweenMoveState = {
+    enabled = false,
+    speed = 18,
+    platform = nil,
+    tween = nil,
+    conn = nil,
+    charConn = nil,
+    folder = nil,
+}
+
+local function getTweenFolder()
+    if tweenMoveState.folder and tweenMoveState.folder.Parent then
+        return tweenMoveState.folder
+    end
+    local folder = Services.Workspace:FindFirstChild("TWW_Movement")
+    if not folder then
+        folder = Instance.new("Folder")
+        folder.Name = "TWW_Movement"
+        folder.Parent = Services.Workspace
+    end
+    tweenMoveState.folder = folder
+    return folder
+end
+
+local function buildTweenIgnoreList()
+    local ignore = {}
+    if LocalPlayer.Character then
+        table.insert(ignore, LocalPlayer.Character)
+    end
+    local model = getLocalPlayerModel()
+    if model and model ~= LocalPlayer.Character then
+        table.insert(ignore, model)
+    end
+    if tweenMoveState.platform then
+        table.insert(ignore, tweenMoveState.platform)
+    end
+    return ignore
+end
+
+local function ensureTweenPlatform()
+    local platform = tweenMoveState.platform
+    if platform and platform.Parent then
+        return platform
+    end
+    platform = Instance.new("Part")
+    platform.Name = "TWW_TweenPlatform"
+    platform.Anchored = true
+    platform.CanCollide = true
+    platform.CanTouch = false
+    platform.CanQuery = false
+    platform.Size = Vector3.new(6, 1, 6)
+    platform.Material = Enum.Material.SmoothPlastic
+    platform.Color = Color3.fromRGB(50, 200, 255)
+    platform.Transparency = 0.35
+    platform.Parent = getTweenFolder()
+    tweenMoveState.platform = platform
+    return platform
+end
+
+local function placePlatformUnderPlayer()
+    local root = getLocalRootPart()
+    if not root then
+        return nil
+    end
+    local humanoid = getLocalHumanoid()
+    local platform = ensureTweenPlatform()
+    if not platform then
+        return nil
+    end
+
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.FilterDescendantsInstances = buildTweenIgnoreList()
+    params.IgnoreWater = true
+
+    local groundY = nil
+    local hit = Services.Workspace:Raycast(root.Position, Vector3.new(0, -200, 0), params)
+    if hit then
+        groundY = hit.Position.Y
+    else
+        local hip = humanoid and humanoid.HipHeight or 2
+        groundY = root.Position.Y - (root.Size.Y * 0.5 + hip)
+    end
+    local y = groundY + (platform.Size.Y * 0.5)
+    platform.CFrame = CFrame.new(root.Position.X, y, root.Position.Z)
+    return platform
+end
+
+local function getClickTarget()
+    local cam = getCamera()
+    if not cam then
+        return nil
+    end
+    local mousePos = Services.UserInputService:GetMouseLocation()
+    local inset = Services.GuiService:GetGuiInset()
+    local x = mousePos.X - inset.X
+    local y = mousePos.Y - inset.Y
+    local ray = cam:ViewportPointToRay(x, y)
+
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.FilterDescendantsInstances = buildTweenIgnoreList()
+    params.IgnoreWater = true
+
+    local result = Services.Workspace:Raycast(ray.Origin, ray.Direction * 10000, params)
+    if not result then
+        return nil
+    end
+
+    local hitPos = result.Position
+    if result.Normal and result.Normal.Y < 0.6 then
+        local ground = Services.Workspace:Raycast(hitPos + Vector3.new(0, 6, 0), Vector3.new(0, -200, 0), params)
+        if ground then
+            hitPos = ground.Position
+        end
+    end
+    return hitPos
+end
+
+local function startPlatformTween(targetPos)
+    if not targetPos then
+        return
+    end
+    local platform = ensureTweenPlatform()
+    if not platform then
+        return
+    end
+
+    local target = Vector3.new(targetPos.X, targetPos.Y + (platform.Size.Y * 0.5), targetPos.Z)
+    local distance = (platform.Position - target).Magnitude
+    local speed = math.max(tonumber(tweenMoveState.speed) or 18, 1)
+    local duration = math.max(distance / speed, 0.05)
+
+    if tweenMoveState.tween then
+        pcall(function()
+            tweenMoveState.tween:Cancel()
+        end)
+        tweenMoveState.tween = nil
+    end
+
+    local info = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+    tweenMoveState.tween = TweenService:Create(platform, info, { CFrame = CFrame.new(target) })
+    tweenMoveState.tween:Play()
+end
+
+local function setTweenMoveSpeed(value)
+    local num = tonumber(value)
+    if not num then
+        return
+    end
+    tweenMoveState.speed = math.clamp(num, 8, 30)
+end
+
+local function setTweenMoveEnabled(state)
+    tweenMoveState.enabled = state == true
+
+    if tweenMoveState.conn then
+        tweenMoveState.conn:Disconnect()
+        tweenMoveState.conn = nil
+    end
+    if tweenMoveState.charConn then
+        tweenMoveState.charConn:Disconnect()
+        tweenMoveState.charConn = nil
+    end
+
+    if not tweenMoveState.enabled then
+        if tweenMoveState.tween then
+            pcall(function()
+                tweenMoveState.tween:Cancel()
+            end)
+            tweenMoveState.tween = nil
+        end
+        if tweenMoveState.platform then
+            tweenMoveState.platform:Destroy()
+            tweenMoveState.platform = nil
+        end
+        return
+    end
+
+    placePlatformUnderPlayer()
+
+    tweenMoveState.conn = Services.UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed or not tweenMoveState.enabled then
+            return
+        end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            local target = getClickTarget()
+            if target then
+                startPlatformTween(target)
+            end
+        end
+    end)
+
+    tweenMoveState.charConn = LocalPlayer.CharacterAdded:Connect(function()
+        if tweenMoveState.enabled then
+            task.wait(0.1)
+            placePlatformUnderPlayer()
+        end
+    end)
+end
+
+disableAllEsp = function()
     local esp = TWW.Esp
     if esp then
         if esp.enableAnimals then
@@ -988,6 +1195,7 @@ local function disableAllEsp()
     setPostEffectsOff(false)
     setAimAssistEnabled(false)
     setScopeHideEnabled(false)
+    setTweenMoveEnabled(false)
 end
 
 TWW.disableAllEsp = disableAllEsp
@@ -1224,6 +1432,15 @@ local function buildClientTab()
     Tabs.Client:Button("Reset FOV", function()
         resetFov()
     end)
+
+    Tabs.Client:Separator("Movement")
+    Tabs.Client:Toggle("Click Tween Move", function(state)
+        setTweenMoveEnabled(state)
+    end, false)
+
+    Tabs.Client:Slider("Tween Speed", 8, 30, tweenMoveState.speed, function(value)
+        setTweenMoveSpeed(value)
+    end, 0.5)
 end
 
 local function buildAudioTab()
