@@ -1339,6 +1339,10 @@ disableAllEsp = function()
     if farm and farm.setOreFarmEnabled then
         farm.setOreFarmEnabled(false)
     end
+    local skillFarm = TWW.SkillFarm
+    if skillFarm and skillFarm.setAllEnabled then
+        skillFarm.setAllEnabled(false)
+    end
     setFullbright(false)
     setFovEnabled(false)
     resetSfxVolume()
@@ -1452,6 +1456,59 @@ local function buildFarmTab()
             end
         end
     end, true)
+
+    Tabs.Farm:Separator("Skill AutoFarm")
+    local skillFarm = TWW.SkillFarm
+    if not skillFarm then
+        Tabs.Farm:Label("SkillFarm module not loaded.")
+        return
+    end
+
+    Tabs.Farm:Toggle("Enable All Skills", function(stateOn)
+        if skillFarm.setAllEnabled then
+            skillFarm.setAllEnabled(stateOn)
+        end
+    end, false)
+
+    local activeSkills = {}
+    local inactiveSkills = {}
+    if skillFarm.skillOrder and skillFarm.skillInfo then
+        for _, name in ipairs(skillFarm.skillOrder) do
+            local info = skillFarm.skillInfo[name]
+            if info and info.active then
+                table.insert(activeSkills, name)
+            else
+                table.insert(inactiveSkills, name)
+            end
+        end
+    end
+
+    table.sort(activeSkills)
+    table.sort(inactiveSkills)
+
+    if #activeSkills > 0 then
+        Tabs.Farm:Separator("Active Skills")
+        for _, name in ipairs(activeSkills) do
+            local skillName = name
+            Tabs.Farm:Toggle(skillName .. " AutoFarm", function(stateOn)
+                if skillFarm.setSkillEnabled then
+                    skillFarm.setSkillEnabled(skillName, stateOn)
+                end
+            end, false)
+        end
+    end
+
+    if #inactiveSkills > 0 then
+        Tabs.Farm:Separator("Inactive Skills")
+        for _, name in ipairs(inactiveSkills) do
+            local skillName = name
+            Tabs.Farm:Toggle(skillName .. " AutoFarm", function(stateOn)
+                if skillFarm.setSkillEnabled then
+                    skillFarm.setSkillEnabled(skillName, stateOn)
+                end
+            end, false)
+        end
+    end
 end
 
 local function buildConfigTab()
