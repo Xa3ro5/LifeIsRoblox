@@ -34,30 +34,31 @@ end)
 local LocalPlayer = TWW.LocalPlayer or Services.Players.LocalPlayer
 TWW.LocalPlayer = LocalPlayer
 
-local function getOreState()
-    local esp = TWW.Esp
-    return (esp and esp.oreState) or { selections = {}, oreFolders = {} }
+--// Accessors ---------------------------------------------------------------
+
+local function getEsp()
+    return TWW.Esp or {}
 end
 
 local function rebuildOreFolders()
-    local esp = TWW.Esp
-    if esp and esp.rebuildOreFolders then
+    local esp = getEsp()
+    if esp.rebuildOreFolders then
         return esp.rebuildOreFolders()
     end
     return nil
 end
 
 local function findOreRemainingValue(model, oreName)
-    local esp = TWW.Esp
-    if esp and esp.findOreRemainingValue then
+    local esp = getEsp()
+    if esp.findOreRemainingValue then
         return esp.findOreRemainingValue(model, oreName)
     end
     return nil
 end
 
 local function getModelPart(model)
-    local esp = TWW.Esp
-    if esp and esp.getModelPart then
+    local esp = getEsp()
+    if esp.getModelPart then
         return esp.getModelPart(model)
     end
     if not model then
@@ -85,18 +86,18 @@ local function getModelPart(model)
 end
 
 local function getLocalPlayerModel()
-    local esp = TWW.Esp
-    if esp and esp.getLocalPlayerModel then
+    local esp = getEsp()
+    if esp.getLocalPlayerModel then
         return esp.getLocalPlayerModel()
     end
-    local playersFolder = Services.Workspace:FindFirstChild("WORKSPACE_Entities")
-    playersFolder = playersFolder and playersFolder:FindFirstChild("Players") or nil
+    local entities = Services.Workspace:FindFirstChild("WORKSPACE_Entities")
+    local playersFolder = entities and entities:FindFirstChild("Players") or nil
     return playersFolder and playersFolder:FindFirstChild(LocalPlayer.Name) or nil
 end
 
 local function getLocalHumanoid()
-    local esp = TWW.Esp
-    if esp and esp.getLocalHumanoid then
+    local esp = getEsp()
+    if esp.getLocalHumanoid then
         return esp.getLocalHumanoid()
     end
     local character = LocalPlayer.Character
@@ -114,8 +115,8 @@ local function getLocalHumanoid()
 end
 
 local function getLocalRootPart()
-    local esp = TWW.Esp
-    if esp and esp.getLocalRootPart then
+    local esp = getEsp()
+    if esp.getLocalRootPart then
         return esp.getLocalRootPart()
     end
     local humanoid = getLocalHumanoid()
@@ -141,6 +142,8 @@ local function getLocalRootPart()
     return nil
 end
 
+--// State ------------------------------------------------------------------
+
 TWW.Farm = TWW.Farm or {}
 local Farm = TWW.Farm
 
@@ -149,13 +152,19 @@ if not oreFarmState then
     oreFarmState = {
         enabled = false,
         running = false,
+        session = 0,
         target = nil,
         mouseDown = false,
+        lastScan = 0,
+        lastMoveMode = nil,
+        autoRotateBackup = nil,
+        autoRotateHumanoid = nil,
+        facePart = nil,
+        faceBound = false,
         mineDistance = 6,
         waypointRadius = 6,
         scanInterval = 1.0,
         waypointTimeout = 3.5,
-        lastScan = 0,
         jumpEnabled = true,
         runEnabled = true,
         mineStallTime = 1.0,
@@ -166,12 +175,6 @@ if not oreFarmState then
         pathSampleSpacing = 4,
         pathLookahead = 3,
         pathSegmentLength = 240,
-        session = 0,
-        lastMoveMode = nil,
-        autoRotateBackup = nil,
-        autoRotateHumanoid = nil,
-        facePart = nil,
-        faceBound = false,
         keyState = {
             [Enum.KeyCode.W] = false,
             [Enum.KeyCode.A] = false,
@@ -183,13 +186,44 @@ if not oreFarmState then
     Farm.oreFarmState = oreFarmState
 end
 
-oreFarmState.keyState = oreFarmState.keyState or {
-    [Enum.KeyCode.W] = false,
-    [Enum.KeyCode.A] = false,
-    [Enum.KeyCode.S] = false,
-    [Enum.KeyCode.D] = false,
-    [Enum.KeyCode.LeftShift] = false,
-}
+local function applyDefaults()
+    local defaults = {
+        enabled = false,
+        running = false,
+        session = 0,
+        mouseDown = false,
+        mineDistance = 6,
+        waypointRadius = 6,
+        scanInterval = 1.0,
+        waypointTimeout = 3.5,
+        jumpEnabled = true,
+        runEnabled = true,
+        mineStallTime = 1.0,
+        mineStallReset = 0.08,
+        moveStallTime = 1.2,
+        moveProgressMin = 0.45,
+        pathClearance = 0.9,
+        pathSampleSpacing = 4,
+        pathLookahead = 3,
+        pathSegmentLength = 240,
+    }
+    for key, value in pairs(defaults) do
+        if oreFarmState[key] == nil then
+            oreFarmState[key] = value
+        end
+    end
+    oreFarmState.keyState = oreFarmState.keyState or {
+        [Enum.KeyCode.W] = false,
+        [Enum.KeyCode.A] = false,
+        [Enum.KeyCode.S] = false,
+        [Enum.KeyCode.D] = false,
+        [Enum.KeyCode.LeftShift] = false,
+    }
+end
+
+applyDefaults()
+
+--// Control & Movement ------------------------------------------------------
 
 local controlModuleCache = nil
 
@@ -215,18 +249,18 @@ end
 local function worldToCameraMoveVector(worldDir)
     local cam = Services.Workspace.CurrentCamera
     if not cam then
-        return worldDir, false
+        return worldDir
     end
     local forward = Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z)
     local right = Vector3.new(cam.CFrame.RightVector.X, 0, cam.CFrame.RightVector.Z)
     if forward.Magnitude < 0.001 or right.Magnitude < 0.001 then
-        return worldDir, false
+        return worldDir
     end
     forward = forward.Unit
     right = right.Unit
     local x = worldDir:Dot(right)
     local z = worldDir:Dot(forward)
-    return Vector3.new(x, 0, z), true
+    return Vector3.new(x, 0, z)
 end
 
 local function setMoveMode(mode)
@@ -281,12 +315,10 @@ local function applyMoveDirection(worldDir)
 
     if Services.VirtualInputManager then
         local camVec = worldToCameraMoveVector(dir)
-        local x = camVec.X
-        local z = camVec.Z
-        local w = z > 0.25
-        local s = z < -0.25
-        local d = x > 0.25
-        local a = x < -0.25
+        local w = camVec.Z > 0.25
+        local s = camVec.Z < -0.25
+        local d = camVec.X > 0.25
+        local a = camVec.X < -0.25
         setKeyState(Enum.KeyCode.W, w)
         setKeyState(Enum.KeyCode.S, s)
         setKeyState(Enum.KeyCode.D, d)
@@ -318,6 +350,8 @@ local function stopAutoMove()
     applyMoveDirection(Vector3.new(0, 0, 0))
     clearMovementKeys()
 end
+
+--// Facing -----------------------------------------------------------------
 
 local function beginFaceTarget()
     local humanoid = getLocalHumanoid()
@@ -372,20 +406,7 @@ local function endFaceTarget()
     stopFaceLoop()
 end
 
-local function faceTarget(part)
-    if not part then
-        return
-    end
-    local cam = Services.Workspace.CurrentCamera
-    if cam then
-        cam.CFrame = CFrame.new(cam.CFrame.Position, part.Position)
-    end
-    local root = getLocalRootPart()
-    if root then
-        local pos = root.Position
-        root.CFrame = CFrame.new(pos, Vector3.new(part.Position.X, pos.Y, part.Position.Z))
-    end
-end
+--// Mouse ------------------------------------------------------------------
 
 local function getMousePosition()
     local pos = Services.UserInputService:GetMouseLocation()
@@ -418,6 +439,13 @@ local function setMouseDown(state)
     end
 end
 
+--// Ore Selection -----------------------------------------------------------
+
+local function getOreState()
+    local esp = getEsp()
+    return esp.oreState or { selections = {}, oreFolders = {} }
+end
+
 local function gatherOreCandidates()
     local candidates = {}
     local deposits = rebuildOreFolders()
@@ -441,6 +469,23 @@ local function gatherOreCandidates()
         end
     end
     return candidates
+end
+
+local function isValidTarget(target)
+    if not target or not target.model or not target.model.Parent then
+        return false
+    end
+    local remaining = target.remaining
+    if not remaining or not remaining.Parent then
+        remaining = findOreRemainingValue(target.model, target.oreName)
+        target.remaining = remaining
+    end
+    local value = remaining and tonumber(remaining.Value) or 0
+    if value <= 0 then
+        return false
+    end
+    target.part = getModelPart(target.model)
+    return target.part ~= nil
 end
 
 local function findClosestOreTarget()
@@ -476,6 +521,8 @@ local function findClosestOreTarget()
     return best, bestDist
 end
 
+--// Pathing ----------------------------------------------------------------
+
 local function simplifyWaypoints(waypoints)
     if not waypoints or #waypoints <= 2 then
         return waypoints
@@ -490,9 +537,7 @@ local function simplifyWaypoints(waypoints)
         else
             local dir1 = curr.Position - prev.Position
             local dir2 = next.Position - curr.Position
-            if dir1.Magnitude < 0.05 or dir2.Magnitude < 0.05 then
-                -- skip tiny segments
-            else
+            if dir1.Magnitude > 0.05 and dir2.Magnitude > 0.05 then
                 local dot = dir1.Unit:Dot(dir2.Unit)
                 if dot < 0.98 then
                     table.insert(simplified, curr)
@@ -510,7 +555,7 @@ local function computePathDetailed(startPos, goalPos, agentRadius, agentHeight)
         AgentHeight = agentHeight or 5,
         AgentCanJump = true,
         AgentCanClimb = true,
-        WaypointSpacing = 4,
+        WaypointSpacing = math.clamp(oreFarmState.pathSampleSpacing or 4, 2, 6),
     })
     local ok = pcall(function()
         path:ComputeAsync(startPos, goalPos)
@@ -912,6 +957,8 @@ local function getLookaheadIndex(waypoints, startIndex, ignoreInstance, radius, 
     return startIndex
 end
 
+--// Move To Target ----------------------------------------------------------
+
 local function moveToOreTarget(target)
     if not target or not target.part then
         return false
@@ -983,9 +1030,7 @@ local function moveToOreTarget(target)
         local idx = 1
         local reachedGoal = false
         while idx <= #waypoints and oreFarmState.enabled do
-            local remaining = findOreRemainingValue(target.model, target.oreName)
-            local value = remaining and tonumber(remaining.Value) or 0
-            if not remaining or value <= 0 then
+            if not isValidTarget(target) then
                 stopAutoMove()
                 break
             end
@@ -1042,6 +1087,8 @@ local function moveToOreTarget(target)
 
     return false
 end
+
+--// Mining -----------------------------------------------------------------
 
 local function mineOreTarget(target)
     if not target or not target.part then
@@ -1101,6 +1148,8 @@ local function mineOreTarget(target)
     endFaceTarget()
 end
 
+--// Main Loop ---------------------------------------------------------------
+
 local function oreFarmLoop(sessionId)
     if oreFarmState.running then
         if sessionId ~= oreFarmState.session then
@@ -1109,9 +1158,11 @@ local function oreFarmLoop(sessionId)
     end
     oreFarmState.running = true
     oreFarmState.target = nil
+
     while oreFarmState.enabled and sessionId == oreFarmState.session do
         local root = getLocalRootPart()
-        if not root then
+        local humanoid = getLocalHumanoid()
+        if not root or not humanoid or humanoid.Health <= 0 then
             setMouseDown(false)
             stopAutoMove()
             endFaceTarget()
@@ -1119,54 +1170,19 @@ local function oreFarmLoop(sessionId)
             continue
         end
 
-        if not oreFarmState.target or not oreFarmState.target.model or not oreFarmState.target.model.Parent then
+        if not oreFarmState.target or not isValidTarget(oreFarmState.target) then
             if os.clock() - oreFarmState.lastScan >= oreFarmState.scanInterval then
                 oreFarmState.lastScan = os.clock()
                 oreFarmState.target = findClosestOreTarget()
             end
-        else
-            local remaining = oreFarmState.target.remaining
-            if not remaining or not remaining.Parent then
-                remaining = findOreRemainingValue(oreFarmState.target.model, oreFarmState.target.oreName)
-                oreFarmState.target.remaining = remaining
-            end
-            local value = remaining and tonumber(remaining.Value) or nil
-            if value ~= nil and value <= 0 then
-                oreFarmState.target = nil
-                oreFarmState.lastScan = 0
-            end
         end
 
         local target = oreFarmState.target
-        if not target then
+        if not target or not isValidTarget(target) then
             setMouseDown(false)
             stopAutoMove()
             endFaceTarget()
-            task.wait(0.4)
-            continue
-        end
-
-        target.part = getModelPart(target.model)
-        if not target.part then
-            stopAutoMove()
-            endFaceTarget()
-            oreFarmState.target = nil
-            task.wait(0.2)
-            continue
-        end
-
-        local remaining = target.remaining
-        if not remaining or not remaining.Parent then
-            remaining = findOreRemainingValue(target.model, target.oreName)
-            target.remaining = remaining
-        end
-        local value = remaining and tonumber(remaining.Value) or nil
-        if value ~= nil and value <= 0 then
-            stopAutoMove()
-            endFaceTarget()
-            oreFarmState.target = nil
-            oreFarmState.lastScan = 0
-            task.wait(0.2)
+            task.wait(0.35)
             continue
         end
 
@@ -1197,6 +1213,8 @@ local function oreFarmLoop(sessionId)
     endFaceTarget()
     oreFarmState.running = false
 end
+
+--// Public API --------------------------------------------------------------
 
 local function setOreFarmEnabled(state)
     oreFarmState.enabled = state == true
