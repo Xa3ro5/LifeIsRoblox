@@ -40,6 +40,60 @@ end
 local LocalPlayer = TWW.LocalPlayer or Services.Players.LocalPlayer
 TWW.LocalPlayer = LocalPlayer
 
+local function safeRequireModule(pathParts)
+    local node = Services.ReplicatedStorage
+    for _, name in ipairs(pathParts) do
+        node = node and node:FindFirstChild(name) or nil
+        if not node then
+            return nil
+        end
+    end
+    if node:IsA("ModuleScript") then
+        local ok, mod = pcall(require, node)
+        if ok then
+            return mod
+        end
+    end
+    return nil
+end
+
+local function ensureTagHandlerSafe()
+    local global = safeRequireModule({ "SharedModules", "Global" })
+    if not global then
+        return
+    end
+
+    local function wrapTagHandler(tagHandler)
+        if type(tagHandler) == "table" and type(tagHandler.new) == "function" and not tagHandler.__twwSafe then
+            local originalNew = tagHandler.new
+            tagHandler.new = function(...)
+                local ok, result = pcall(originalNew, ...)
+                if ok then
+                    return result
+                end
+                return nil
+            end
+            tagHandler.__twwSafe = true
+        end
+    end
+
+    if global.TagHandler then
+        wrapTagHandler(global.TagHandler)
+        return
+    end
+
+    local tagHandler = safeRequireModule({ "SharedModules", "Utils", "TagHandler" })
+    if tagHandler then
+        global.TagHandler = tagHandler
+        wrapTagHandler(tagHandler)
+        return
+    end
+
+    global.TagHandler = { new = function() return nil end, __twwSafe = true }
+end
+
+pcall(ensureTagHandlerSafe)
+
 local Library = TWW.Library
 if not Library then
     Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Xa3ro5/LifeIsRoblox/refs/heads/main/SmugLib.lua"))()
@@ -963,6 +1017,10 @@ local tweenMoveState = {
     tween = nil,
     conn = nil,
     charConn = nil,
+    followConn = nil,
+    tweenConn = nil,
+    weld = nil,
+    isTweening = false,
     folder = nil,
 }
 
@@ -1013,6 +1071,33 @@ local function ensureTweenPlatform()
     platform.Parent = getTweenFolder()
     tweenMoveState.platform = platform
     return platform
+end
+
+local function detachPlatformWeld()
+    if tweenMoveState.weld then
+        tweenMoveState.weld:Destroy()
+        tweenMoveState.weld = nil
+    end
+end
+
+local function attachPlatformWeld()
+    local root = getLocalRootPart()
+    if not root then
+        return
+    end
+    local platform = ensureTweenPlatform()
+    if not platform then
+        return
+    end
+    local weld = tweenMoveState.weld
+    if not weld or not weld.Parent then
+        weld = Instance.new("WeldConstraint")
+        weld.Name = "TWW_TweenWeld"
+        weld.Parent = platform
+        tweenMoveState.weld = weld
+    end
+    weld.Part0 = platform
+    weld.Part1 = root
 end
 
 local function placePlatformUnderPlayer()
@@ -1084,6 +1169,10 @@ local function startPlatformTween(targetPos)
         return
     end
 
+    detachPlatformWeld()
+    placePlatformUnderPlayer()
+    attachPlatformWeld()
+
     local target = Vector3.new(targetPos.X, targetPos.Y + (platform.Size.Y * 0.5), targetPos.Z)
     local distance = (platform.Position - target).Magnitude
     local speed = math.max(tonumber(tweenMoveState.speed) or 18, 1)
@@ -1095,9 +1184,18 @@ local function startPlatformTween(targetPos)
         end)
         tweenMoveState.tween = nil
     end
+    if tweenMoveState.tweenConn then
+        tweenMoveState.tweenConn:Disconnect()
+        tweenMoveState.tweenConn = nil
+    end
 
     local info = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
     tweenMoveState.tween = TweenService:Create(platform, info, { CFrame = CFrame.new(target) })
+    tweenMoveState.isTweening = true
+    tweenMoveState.tweenConn = tweenMoveState.tween.Completed:Connect(function()
+        tweenMoveState.isTweening = false
+        detachPlatformWeld()
+    end)
     tweenMoveState.tween:Play()
 end
 
@@ -1120,14 +1218,24 @@ local function setTweenMoveEnabled(state)
         tweenMoveState.charConn:Disconnect()
         tweenMoveState.charConn = nil
     end
+    if tweenMoveState.followConn then
+        tweenMoveState.followConn:Disconnect()
+        tweenMoveState.followConn = nil
+    end
+    if tweenMoveState.tweenConn then
+        tweenMoveState.tweenConn:Disconnect()
+        tweenMoveState.tweenConn = nil
+    end
 
     if not tweenMoveState.enabled then
+        tweenMoveState.isTweening = false
         if tweenMoveState.tween then
             pcall(function()
                 tweenMoveState.tween:Cancel()
             end)
             tweenMoveState.tween = nil
         end
+        detachPlatformWeld()
         if tweenMoveState.platform then
             tweenMoveState.platform:Destroy()
             tweenMoveState.platform = nil
@@ -1154,6 +1262,13 @@ local function setTweenMoveEnabled(state)
             task.wait(0.1)
             placePlatformUnderPlayer()
         end
+    end)
+
+    tweenMoveState.followConn = Services.RunService.Heartbeat:Connect(function()
+        if not tweenMoveState.enabled or tweenMoveState.isTweening then
+            return
+        end
+        placePlatformUnderPlayer()
     end)
 end
 
