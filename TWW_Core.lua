@@ -157,7 +157,6 @@ if not Tabs then
         Filters = Window:Folder("Filters"),
         Aim = Window:Folder("Aim"),
         Visuals = Window:Folder("Visuals"),
-        Farm = Window:Folder("Farm"),
         Config = Window:Folder("Config"),
         Client = Window:Folder("Client"),
         Audio = Window:Folder("Audio"),
@@ -184,7 +183,6 @@ local function ensureWindowAndTabs()
             Filters = win:Folder("Filters"),
             Aim = win:Folder("Aim"),
             Visuals = win:Folder("Visuals"),
-            Farm = win:Folder("Farm"),
             Config = win:Folder("Config"),
             Client = win:Folder("Client"),
             Audio = win:Folder("Audio"),
@@ -1335,14 +1333,6 @@ disableAllEsp = function()
             esp.enableOres(false)
         end
     end
-    local farm = TWW.Farm
-    if farm and farm.setOreFarmEnabled then
-        farm.setOreFarmEnabled(false)
-    end
-    local skillFarm = TWW.SkillFarm
-    if skillFarm and skillFarm.setAllEnabled then
-        skillFarm.setAllEnabled(false)
-    end
     setFullbright(false)
     setFovEnabled(false)
     resetSfxVolume()
@@ -1416,98 +1406,6 @@ local function buildFiltersTab()
     end
     if TWW.Esp and TWW.Esp.buildAnimalExcludeCheckboxes then
         TWW.Esp.buildAnimalExcludeCheckboxes(Tabs.Filters)
-    end
-end
-
-local function buildFarmTab()
-    local farm = TWW.Farm or {}
-    local state = farm.oreFarmState or { mineDistance = 6, scanInterval = 1 }
-
-    Tabs.Farm:Separator("Ore AutoFarm")
-    Tabs.Farm:Toggle("Ore AutoFarm", function(stateOn)
-        if farm.setOreFarmEnabled then
-            farm.setOreFarmEnabled(stateOn)
-        end
-    end, false)
-
-    Tabs.Farm:Slider("Mine Distance", 2, 20, state.mineDistance or 6, function(value)
-        if farm.setOreFarmMineDistance then
-            farm.setOreFarmMineDistance(value)
-        end
-    end, 0.5)
-
-    Tabs.Farm:Slider("Scan Interval", 0.2, 5, state.scanInterval or 1, function(value)
-        if farm.setOreFarmScanInterval then
-            farm.setOreFarmScanInterval(value)
-        end
-    end, 0.1)
-
-    Tabs.Farm:Toggle("Auto Jump", function(stateOn)
-        if farm.oreFarmState then
-            farm.oreFarmState.jumpEnabled = stateOn == true
-        end
-    end, true)
-
-    Tabs.Farm:Toggle("Auto Run (Shift)", function(stateOn)
-        if farm.oreFarmState then
-            farm.oreFarmState.runEnabled = stateOn == true
-            if not farm.oreFarmState.runEnabled and farm.setKeyState then
-                farm.setKeyState(Enum.KeyCode.LeftShift, false)
-            end
-        end
-    end, true)
-
-    Tabs.Farm:Separator("Skill AutoFarm")
-    local skillFarm = TWW.SkillFarm
-    if not skillFarm then
-        Tabs.Farm:Label("SkillFarm module not loaded.")
-        return
-    end
-
-    Tabs.Farm:Toggle("Enable All Skills", function(stateOn)
-        if skillFarm.setAllEnabled then
-            skillFarm.setAllEnabled(stateOn)
-        end
-    end, false)
-
-    local activeSkills = {}
-    local inactiveSkills = {}
-    if skillFarm.skillOrder and skillFarm.skillInfo then
-        for _, name in ipairs(skillFarm.skillOrder) do
-            local info = skillFarm.skillInfo[name]
-            if info and info.active then
-                table.insert(activeSkills, name)
-            else
-                table.insert(inactiveSkills, name)
-            end
-        end
-    end
-
-    table.sort(activeSkills)
-    table.sort(inactiveSkills)
-
-    if #activeSkills > 0 then
-        Tabs.Farm:Separator("Active Skills")
-        for _, name in ipairs(activeSkills) do
-            local skillName = name
-            Tabs.Farm:Toggle(skillName .. " AutoFarm", function(stateOn)
-                if skillFarm.setSkillEnabled then
-                    skillFarm.setSkillEnabled(skillName, stateOn)
-                end
-            end, false)
-        end
-    end
-
-    if #inactiveSkills > 0 then
-        Tabs.Farm:Separator("Inactive Skills")
-        for _, name in ipairs(inactiveSkills) do
-            local skillName = name
-            Tabs.Farm:Toggle(skillName .. " AutoFarm", function(stateOn)
-                if skillFarm.setSkillEnabled then
-                    skillFarm.setSkillEnabled(skillName, stateOn)
-                end
-            end, false)
-        end
     end
 end
 
@@ -1683,7 +1581,6 @@ local function buildUi()
     TWW._uiBuilt = true
     buildEspTab()
     buildFiltersTab()
-    buildFarmTab()
     buildConfigTab()
     buildVisualsTab()
     buildAimTab()
