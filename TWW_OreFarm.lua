@@ -192,6 +192,7 @@ local function applyDefaults()
         running = false,
         session = 0,
         mouseDown = false,
+        useControlModule = false,
         mineDistance = 6,
         waypointRadius = 6,
         scanInterval = 1.0,
@@ -228,6 +229,9 @@ applyDefaults()
 local controlModuleCache = nil
 
 local function getControlModule()
+    if not oreFarmState.useControlModule then
+        return nil
+    end
     if controlModuleCache then
         return controlModuleCache
     end
@@ -243,6 +247,8 @@ local function getControlModule()
             end
         end
     end
+    oreFarmState.useControlModule = false
+    controlModuleCache = nil
     return nil
 end
 
@@ -301,16 +307,21 @@ local function applyMoveDirection(worldDir)
     local controls = getControlModule()
     if controls and type(controls.Move) == "function" then
         local camVec = worldToCameraMoveVector(dir)
-        pcall(function()
+        local ok = pcall(function()
             controls:Move(camVec, true)
         end)
-        if oreFarmState.runEnabled then
-            setKeyState(Enum.KeyCode.LeftShift, dir.Magnitude > 0.05)
+        if not ok then
+            oreFarmState.useControlModule = false
+            controlModuleCache = nil
         else
-            setKeyState(Enum.KeyCode.LeftShift, false)
+            if oreFarmState.runEnabled then
+                setKeyState(Enum.KeyCode.LeftShift, dir.Magnitude > 0.05)
+            else
+                setKeyState(Enum.KeyCode.LeftShift, false)
+            end
+            setMoveMode("ControlModule")
+            return true
         end
-        setMoveMode("ControlModule")
-        return true
     end
 
     if Services.VirtualInputManager then
