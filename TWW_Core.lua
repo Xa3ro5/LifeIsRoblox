@@ -101,6 +101,14 @@ if not Library then
 end
 
 local disableAllEsp
+local function handleUiClosed()
+    if disableAllEsp then
+        disableAllEsp()
+    end
+    TWW._uiBuilt = false
+    TWW.Tabs = nil
+    TWW.Window = nil
+end
 
 local Window = TWW.Window
 if not Window then
@@ -109,9 +117,7 @@ if not Window then
         Height = 420,
         ConfigKey = "TWW_ESP",
         OnClose = function()
-            if disableAllEsp then
-                disableAllEsp()
-            end
+            handleUiClosed()
         end,
     })
     TWW.Window = Window
@@ -123,8 +129,8 @@ local function attachUiCloseListener()
             return
         end
         gui.AncestryChanged:Connect(function(_, parent)
-            if not parent and disableAllEsp then
-                disableAllEsp()
+            if not parent then
+                handleUiClosed()
             end
         end)
     end
@@ -157,6 +163,35 @@ if not Tabs then
         Audio = Window:Folder("Audio"),
     }
     TWW.Tabs = Tabs
+end
+
+local function ensureWindowAndTabs()
+    local win = TWW.Window
+    if not win then
+        win = Library:CreateWindow("TWW ESP", {
+            Width = 520,
+            Height = 420,
+            ConfigKey = "TWW_ESP",
+            OnClose = function()
+                handleUiClosed()
+            end,
+        })
+        TWW.Window = win
+    end
+    if not TWW.Tabs then
+        TWW.Tabs = {
+            Esp = win:Folder("ESP"),
+            Filters = win:Folder("Filters"),
+            Aim = win:Folder("Aim"),
+            Visuals = win:Folder("Visuals"),
+            Farm = win:Folder("Farm"),
+            Config = win:Folder("Config"),
+            Client = win:Folder("Client"),
+            Audio = win:Folder("Audio"),
+        }
+    end
+    Tabs = TWW.Tabs
+    Window = win
 end
 
 local function getLocalPlayerModel()
@@ -1587,6 +1622,7 @@ local function buildUi()
     if TWW._uiBuilt then
         return
     end
+    ensureWindowAndTabs()
     TWW._uiBuilt = true
     buildEspTab()
     buildFiltersTab()
