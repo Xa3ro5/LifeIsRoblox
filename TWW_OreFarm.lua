@@ -194,6 +194,7 @@ local function applyDefaults()
         mouseDown = false,
         useControlModule = false,
         mineDistance = 6,
+        requireLineOfSight = true,
         waypointRadius = 6,
         scanInterval = 1.0,
         waypointTimeout = 3.5,
@@ -616,6 +617,23 @@ local function buildRaycastParams(ignoreInstance)
     return params
 end
 
+local function hasLineOfSight(fromPos, targetPart, ignoreInstance)
+    if not fromPos or not targetPart then
+        return false
+    end
+    local origin = fromPos + Vector3.new(0, 1.5, 0)
+    local dir = targetPart.Position - origin
+    if dir.Magnitude < 0.05 then
+        return true
+    end
+    local params = buildRaycastParams(ignoreInstance)
+    local result = Services.Workspace:Raycast(origin, dir, params)
+    if not result then
+        return true
+    end
+    return result.Instance and result.Instance:IsDescendantOf(targetPart.Parent)
+end
+
 local function buildOverlapParams(ignoreInstance)
     local params = OverlapParams.new()
     params.FilterType = Enum.RaycastFilterType.Blacklist
@@ -890,6 +908,21 @@ local function walkToPosition(targetPos, timeout, ignoreInstance)
     return false
 end
 
+local function isInMineRange(target)
+    local root = getLocalRootPart()
+    if not root or not target or not target.part then
+        return false
+    end
+    local dist = (root.Position - target.part.Position).Magnitude
+    if dist > (oreFarmState.mineDistance or 6) then
+        return false
+    end
+    if oreFarmState.requireLineOfSight and not hasLineOfSight(root.Position, target.part, target.model) then
+        return false
+    end
+    return true
+end
+
 local function buildOreGoalPositions(target)
     local part = target and (target.part or getModelPart(target.model))
     if not part then
@@ -900,12 +933,40 @@ local function buildOreGoalPositions(target)
     local candidates = buildGoalCandidates(base, desiredRadius)
     local radius, height = getPathClearanceRadius()
     local results = {}
+
+    -- Prefer candidates at the ore's Y-level (avoids surface projection above caves).
     for _, pos in ipairs(candidates) do
-        local ground = projectToGround(pos, target.model) or pos
-        if isWaypointClear(ground, target.model, radius, height) then
-            table.insert(results, ground)
+        local sameY = Vector3.new(pos.X, base.Y, pos.Z)
+        if isWaypointClear(sameY, target.model, radius, height) then
+            table.insert(results, sameY)
         end
     end
+
+    -- If nothing clear, try small vertical offsets around the ore height.
+    if #results == 0 then
+        local offsets = { 2, -2, 4, -4 }
+        for _, dy in ipairs(offsets) do
+            for _, pos in ipairs(candidates) do
+                local shifted = Vector3.new(pos.X, base.Y + dy, pos.Z)
+                if isWaypointClear(shifted, target.model, radius, height) then
+                    table.insert(results, shifted)
+                end
+            end
+        end
+    end
+
+    -- Fallback: project to ground, but only if line-of-sight is acceptable.
+    if #results == 0 then
+        for _, pos in ipairs(candidates) do
+            local ground = projectToGround(pos, target.model) or pos
+            if isWaypointClear(ground, target.model, radius, height) then
+                if not oreFarmState.requireLineOfSight or hasLineOfSight(ground, part, target.model) then
+                    table.insert(results, ground)
+                end
+            end
+        end
+    end
+
     if #results == 0 then
         table.insert(results, base)
     end
@@ -996,7 +1057,7 @@ local function moveToOreTarget(target)
         end
 
         local startDist = (root.Position - target.part.Position).Magnitude
-        if startDist <= oreFarmState.mineDistance then
+        if isInMineRange(target) then
             return true
         end
 
@@ -1064,7 +1125,7 @@ local function moveToOreTarget(target)
                 stopAutoMove()
                 break
             end
-            if (root.Position - target.part.Position).Magnitude <= oreFarmState.mineDistance then
+            if isInMineRange(target) then
                 reachedGoal = true
                 break
             end
@@ -1105,6 +1166,10 @@ local function mineOreTarget(target)
     if not target or not target.part then
         return
     end
+    local root = getLocalRootPart()
+    if not root or not isInMineRange(target) then
+        return
+    end
     local remaining = target.remaining
     if not remaining or not remaining.Parent then
         remaining = findOreRemainingValue(target.model, target.oreName)
@@ -1132,6 +1197,9 @@ local function mineOreTarget(target)
             break
         end
         if (root.Position - target.part.Position).Magnitude > (oreFarmState.mineDistance + 3) then
+            break
+        end
+        if oreFarmState.requireLineOfSight and not hasLineOfSight(root.Position, target.part, target.model) then
             break
         end
         if not remaining.Parent then
@@ -1198,7 +1266,7 @@ local function oreFarmLoop(sessionId)
         end
 
         local dist = (root.Position - target.part.Position).Magnitude
-        if dist > oreFarmState.mineDistance then
+        if dist > oreFarmState.mineDistance or (oreFarmState.requireLineOfSight and not hasLineOfSight(root.Position, target.part, target.model)) then
             setMouseDown(false)
             local moved = moveToOreTarget(target)
             if not moved then
@@ -1210,7 +1278,7 @@ local function oreFarmLoop(sessionId)
         end
 
         root = getLocalRootPart()
-        if root and (root.Position - target.part.Position).Magnitude <= oreFarmState.mineDistance then
+        if root and isInMineRange(target) then
             mineOreTarget(target)
             oreFarmState.target = nil
             oreFarmState.lastScan = 0
