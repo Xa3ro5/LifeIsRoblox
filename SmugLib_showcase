@@ -1,0 +1,36 @@
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Xa3ro5/LifeIsRoblox/refs/heads/main/SmugLib.lua"))()
+local Window = Library:CreateWindow("Window")
+local Tab = Window:Folder("Tab")
+
+
+Tab:Label("Text")
+
+Tab:Separator("Separator")
+
+Tab:Button("Click", function()
+    -- callback
+end)
+
+Tab:Toggle("Toggle state", function(state)
+    -- state: true/false
+end, false)
+
+Tab:Checkbox("Toggle but its checkbox", function(state)
+    -- state: true/false
+end, true)
+
+Tab:Slider("Slider", 1, 100, 10, function(value)
+    -- value: number
+end, 1)
+
+Tab:Textbox("Text with function", function(text, enterPressed)
+    -- text: string, enterPressed: bool
+end, "default")
+
+Tab:Bind("Hotkey", Enum.KeyCode.E, function()
+    -- callback
+end)
+
+Tab:Dropdown("Dropdown", {"A", "B", "C"}, function(value)
+    -- value: selected option
+end, "B")
