@@ -46,6 +46,22 @@ local function roundToStep(value, minValue, maxValue, step)
     return clampNumber(snapped, minValue, maxValue)
 end
 
+-- Helper to create a shadow frame
+local function createShadow(parent, sizeOffset, transparency)
+    sizeOffset = sizeOffset or 10
+    transparency = transparency or 0.5
+    local shadow = Instance.new("Frame")
+    shadow.Size = UDim2.new(1, sizeOffset, 1, sizeOffset)
+    shadow.Position = UDim2.new(0, -sizeOffset/2, 0, -sizeOffset/2)
+    shadow.BackgroundColor3 = Color3.new(0, 0, 0)
+    shadow.BackgroundTransparency = transparency
+    shadow.BorderSizePixel = 0
+    shadow.ZIndex = 0
+    round(shadow, 10)
+    shadow.Parent = parent
+    return shadow
+end
+
 function Library:CreateWindow(title, options)
     options = options or {}
 
@@ -71,6 +87,11 @@ function Library:CreateWindow(title, options)
     local height = options.Height or 380
     local toggleKey = options.ToggleKey or Enum.KeyCode.RightShift
     local onClose = options.OnClose
+    local accentColor = options.AccentColor or Color3.fromRGB(74, 111, 165)
+    local backgroundColor = options.BackgroundColor or Color3.fromRGB(30, 30, 36)
+    local topBarColor = options.TopBarColor or Color3.fromRGB(20, 20, 25)
+    local buttonColor = options.ButtonColor or Color3.fromRGB(45, 45, 53)
+    local hoverColor = options.HoverColor or Color3.fromRGB(55, 55, 65)
 
     local function canPersist()
         return HttpService and type(readfile) == "function" and type(writefile) == "function"
@@ -156,18 +177,29 @@ function Library:CreateWindow(title, options)
     local main = Instance.new("Frame")
     main.Size = UDim2.new(0, width, 0, height)
     main.Position = UDim2.new(0.5, -math.floor(width / 2), 1, 20)
-    main.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+    main.BackgroundColor3 = backgroundColor
     main.BorderSizePixel = 0
     main.Parent = screenGui
     round(main, 10)
 
+    -- Shadow
+    local shadow = createShadow(main, 12, 0.6)
+
+    -- Subtle border
+    local border = Instance.new("UIStroke")
+    border.Color = Color3.fromRGB(50, 50, 60)
+    border.Thickness = 1
+    border.Transparency = 0.5
+    border.Parent = main
+
     local top = Instance.new("Frame")
     top.Size = UDim2.new(1, 0, 0, 34)
-    top.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+    top.BackgroundColor3 = topBarColor
     top.BorderSizePixel = 0
     top.Parent = main
     round(top, 10)
 
+    -- Title
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Text = tostring(title or "SmugLib")
     titleLabel.Font = Enum.Font.GothamBold
@@ -179,42 +211,54 @@ function Library:CreateWindow(title, options)
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.Parent = top
 
+    -- Close button
     local closeButton = Instance.new("TextButton")
     closeButton.Size = UDim2.new(0, 34, 1, 0)
     closeButton.Position = UDim2.new(1, -34, 0, 0)
-    closeButton.Text = "X"
+    closeButton.Text = "✕"
     closeButton.Font = Enum.Font.GothamBold
-    closeButton.TextSize = 15
+    closeButton.TextSize = 16
     closeButton.BackgroundColor3 = Color3.fromRGB(180, 46, 46)
     closeButton.TextColor3 = Color3.new(1, 1, 1)
     closeButton.BorderSizePixel = 0
     closeButton.Parent = top
     round(closeButton, 8)
+    local closeHover = TweenService:Create(closeButton, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(200, 60, 60)})
+    connect(closeButton.MouseEnter, function() closeHover:Play() end)
+    connect(closeButton.MouseLeave, function() closeHover:Reverse() end)
 
+    -- Minimize button
     local minimizeButton = Instance.new("TextButton")
     minimizeButton.Size = UDim2.new(0, 34, 1, 0)
     minimizeButton.Position = UDim2.new(1, -70, 0, 0)
-    minimizeButton.Text = "-"
+    minimizeButton.Text = "−"
     minimizeButton.Font = Enum.Font.GothamBold
-    minimizeButton.TextSize = 16
-    minimizeButton.BackgroundColor3 = Color3.fromRGB(96, 96, 96)
+    minimizeButton.TextSize = 18
+    minimizeButton.BackgroundColor3 = Color3.fromRGB(90, 90, 100)
     minimizeButton.TextColor3 = Color3.new(1, 1, 1)
     minimizeButton.BorderSizePixel = 0
     minimizeButton.Parent = top
     round(minimizeButton, 8)
+    local minHover = TweenService:Create(minimizeButton, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(110, 110, 120)})
+    connect(minimizeButton.MouseEnter, function() minHover:Play() end)
+    connect(minimizeButton.MouseLeave, function() minHover:Reverse() end)
 
+    -- Restore button
     local restoreButton = Instance.new("TextButton")
-    restoreButton.Text = "^"
+    restoreButton.Text = "▲"
     restoreButton.Size = UDim2.new(0, 46, 0, 46)
     restoreButton.Position = UDim2.new(0, 20, 1, -70)
     restoreButton.Visible = false
-    restoreButton.BackgroundColor3 = Color3.fromRGB(68, 68, 68)
+    restoreButton.BackgroundColor3 = Color3.fromRGB(68, 68, 78)
     restoreButton.TextColor3 = Color3.new(1, 1, 1)
     restoreButton.Font = Enum.Font.GothamBold
     restoreButton.TextSize = 20
     restoreButton.BorderSizePixel = 0
     restoreButton.Parent = screenGui
     round(restoreButton, 8)
+    local resHover = TweenService:Create(restoreButton, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(88, 88, 98)})
+    connect(restoreButton.MouseEnter, function() resHover:Play() end)
+    connect(restoreButton.MouseLeave, function() resHover:Reverse() end)
 
     local body = Instance.new("Frame")
     body.Size = UDim2.new(1, 0, 1, -34)
@@ -223,6 +267,7 @@ function Library:CreateWindow(title, options)
     body.Parent = main
     padding(body, 8)
 
+    -- Tab bar
     local tabBar = Instance.new("ScrollingFrame")
     tabBar.Size = UDim2.new(1, 0, 0, 28)
     tabBar.CanvasSize = UDim2.new(0, 0, 0, 0)
@@ -246,6 +291,7 @@ function Library:CreateWindow(title, options)
     tabContent.BackgroundTransparency = 1
     tabContent.Parent = body
 
+    -- Toast host
     local toastHost = Instance.new("Frame")
     toastHost.Size = UDim2.new(1, 0, 1, 0)
     toastHost.BackgroundTransparency = 1
@@ -272,8 +318,8 @@ function Library:CreateWindow(title, options)
 
         local frame = Instance.new("Frame")
         frame.Size = UDim2.new(0, 280, 0, 40)
-        frame.BackgroundColor3 = Color3.fromRGB(34, 34, 34)
-        frame.BackgroundTransparency = 0.12
+        frame.BackgroundColor3 = Color3.fromRGB(34, 34, 42)
+        frame.BackgroundTransparency = 0.1
         frame.BorderSizePixel = 0
         frame.Parent = toastHost
         frame.ZIndex = 51
@@ -295,7 +341,7 @@ function Library:CreateWindow(title, options)
 
         local fadeIn = TweenService:Create(
             frame,
-            TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
             { Position = UDim2.new(0.5, -140, 0, 0) }
         )
         fadeIn:Play()
@@ -306,11 +352,11 @@ function Library:CreateWindow(title, options)
             end
             local fadeOut = TweenService:Create(
                 frame,
-                TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+                TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
                 { BackgroundTransparency = 1 }
             )
             fadeOut:Play()
-            task.wait(0.26)
+            task.wait(0.31)
             if frame then
                 frame:Destroy()
             end
@@ -434,14 +480,14 @@ function Library:CreateWindow(title, options)
 
         if currentTabButton and tabs[currentTabButton] then
             tabs[currentTabButton].Frame.Visible = false
-            currentTabButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+            currentTabButton.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
         end
 
         currentTabButton = tabButton
 
         if tabs[tabButton] then
             tabs[tabButton].Frame.Visible = true
-            tabButton.BackgroundColor3 = Color3.fromRGB(65, 65, 65)
+            tabButton.BackgroundColor3 = accentColor
         end
     end
 
@@ -567,7 +613,7 @@ function Library:CreateWindow(title, options)
         tabButton.Font = Enum.Font.Gotham
         tabButton.TextSize = 14
         tabButton.TextColor3 = Color3.new(1, 1, 1)
-        tabButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        tabButton.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
         tabButton.BorderSizePixel = 0
         tabButton.Parent = tabBar
         round(tabButton, 6)
@@ -612,7 +658,7 @@ function Library:CreateWindow(title, options)
             label.Font = Enum.Font.Gotham
             label.Text = tostring(text or "")
             label.TextSize = 13
-            label.TextColor3 = Color3.fromRGB(205, 205, 205)
+            label.TextColor3 = Color3.fromRGB(205, 205, 210)
             label.TextXAlignment = Enum.TextXAlignment.Left
             label.Parent = folderFrame
 
@@ -636,19 +682,19 @@ function Library:CreateWindow(title, options)
             local line = Instance.new("Frame")
             line.Size = UDim2.new(1, 0, 0, 1)
             line.Position = UDim2.new(0, 0, 0.5, 0)
-            line.BackgroundColor3 = Color3.fromRGB(78, 78, 78)
+            line.BackgroundColor3 = Color3.fromRGB(78, 78, 88)
             line.BorderSizePixel = 0
             line.Parent = holder
 
             if text and text ~= "" then
                 local textLabel = Instance.new("TextLabel")
                 textLabel.Size = UDim2.new(0, 120, 1, 0)
-                textLabel.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                textLabel.BackgroundColor3 = backgroundColor
                 textLabel.Position = UDim2.new(0, 8, 0, 0)
                 textLabel.Font = Enum.Font.GothamBold
                 textLabel.Text = tostring(text)
                 textLabel.TextSize = 11
-                textLabel.TextColor3 = Color3.fromRGB(165, 165, 165)
+                textLabel.TextColor3 = Color3.fromRGB(165, 165, 175)
                 textLabel.Parent = holder
             end
         end
@@ -661,11 +707,15 @@ function Library:CreateWindow(title, options)
             button.Text = tostring(text or "Button")
             button.Font = Enum.Font.Gotham
             button.TextSize = 14
-            button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+            button.BackgroundColor3 = buttonColor
             button.TextColor3 = Color3.new(1, 1, 1)
             button.BorderSizePixel = 0
             button.Parent = folderFrame
             round(button, 6)
+
+            local hover = TweenService:Create(button, TweenInfo.new(0.15), {BackgroundColor3 = hoverColor})
+            connect(button.MouseEnter, function() if enabled then hover:Play() end end)
+            connect(button.MouseLeave, function() hover:Reverse() end)
 
             connect(button.MouseButton1Click, function()
                 if not alive or not enabled then
@@ -697,7 +747,7 @@ function Library:CreateWindow(title, options)
 
             local toggleButton = Instance.new("TextButton")
             toggleButton.Size = UDim2.new(1, 0, 0, 32)
-            toggleButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+            toggleButton.BackgroundColor3 = buttonColor
             toggleButton.TextColor3 = Color3.new(1, 1, 1)
             toggleButton.Font = Enum.Font.Gotham
             toggleButton.TextSize = 14
@@ -712,12 +762,14 @@ function Library:CreateWindow(title, options)
             local function setState(newState, triggerCallback)
                 state = not not newState
                 updateText()
+                toggleButton.BackgroundColor3 = state and accentColor or buttonColor
                 if triggerCallback and callback then
                     callback(state)
                 end
             end
 
             updateText()
+            toggleButton.BackgroundColor3 = state and accentColor or buttonColor
 
             connect(toggleButton.MouseButton1Click, function()
                 if not alive then
@@ -761,7 +813,7 @@ function Library:CreateWindow(title, options)
             local box = Instance.new("TextButton")
             box.Size = UDim2.new(0, 22, 0, 22)
             box.Position = UDim2.new(0, 0, 0, 3)
-            box.BackgroundColor3 = state and Color3.fromRGB(76, 132, 76) or Color3.fromRGB(60, 60, 60)
+            box.BackgroundColor3 = state and accentColor or Color3.fromRGB(60, 60, 68)
             box.TextColor3 = Color3.new(1, 1, 1)
             box.Font = Enum.Font.GothamBold
             box.TextSize = 14
@@ -783,8 +835,8 @@ function Library:CreateWindow(title, options)
             labelButton.Parent = row
 
             local function updateVisual()
-                box.Text = state and "X" or ""
-                box.BackgroundColor3 = state and Color3.fromRGB(76, 132, 76) or Color3.fromRGB(60, 60, 60)
+                box.Text = state and "✓" or ""
+                box.BackgroundColor3 = state and accentColor or Color3.fromRGB(60, 60, 68)
             end
 
             local function setState(newState, triggerCallback)
@@ -869,17 +921,26 @@ function Library:CreateWindow(title, options)
             local bar = Instance.new("Frame")
             bar.Size = UDim2.new(1, 0, 0, 12)
             bar.Position = UDim2.new(0, 0, 0, 22)
-            bar.BackgroundColor3 = Color3.fromRGB(58, 58, 58)
+            bar.BackgroundColor3 = Color3.fromRGB(58, 58, 66)
             bar.BorderSizePixel = 0
             bar.Parent = sliderFrame
             round(bar, 6)
 
             local fill = Instance.new("Frame")
             fill.Size = UDim2.new(0, 0, 1, 0)
-            fill.BackgroundColor3 = Color3.fromRGB(110, 150, 255)
+            fill.BackgroundColor3 = accentColor
             fill.BorderSizePixel = 0
             fill.Parent = bar
             round(fill, 6)
+
+            -- Slider handle
+            local handle = Instance.new("Frame")
+            handle.Size = UDim2.new(0, 14, 0, 14)
+            handle.Position = UDim2.new(0, -7, 0, -1)
+            handle.BackgroundColor3 = Color3.new(1, 1, 1)
+            handle.BorderSizePixel = 0
+            handle.Parent = fill
+            round(handle, 7)
 
             local value = clampNumber(tonumber(defaultValue) or minValue, minValue, maxValue)
             value = roundToStep(value, minValue, maxValue, step)
@@ -953,7 +1014,7 @@ function Library:CreateWindow(title, options)
             box.Text = tostring(defaultText or "")
             box.ClearTextOnFocus = false
             box.Size = UDim2.new(1, 0, 0, 32)
-            box.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+            box.BackgroundColor3 = buttonColor
             box.BorderSizePixel = 0
             box.TextColor3 = Color3.new(1, 1, 1)
             box.Font = Enum.Font.Gotham
@@ -988,7 +1049,7 @@ function Library:CreateWindow(title, options)
 
             local bindButton = Instance.new("TextButton")
             bindButton.Size = UDim2.new(1, 0, 0, 32)
-            bindButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+            bindButton.BackgroundColor3 = buttonColor
             bindButton.TextColor3 = Color3.new(1, 1, 1)
             bindButton.Font = Enum.Font.Gotham
             bindButton.TextSize = 14
@@ -1005,6 +1066,7 @@ function Library:CreateWindow(title, options)
             connect(bindButton.MouseButton1Click, function()
                 listening = true
                 bindButton.Text = string.format("%s : ...", displayText)
+                bindButton.BackgroundColor3 = Color3.fromRGB(70, 70, 80)
             end)
 
             connect(UIS.InputBegan, function(input, gameProcessed)
@@ -1016,6 +1078,7 @@ function Library:CreateWindow(title, options)
                     if input.UserInputType == Enum.UserInputType.Keyboard then
                         current = input.KeyCode
                         listening = false
+                        bindButton.BackgroundColor3 = buttonColor
                         updateText()
                     end
                     return
@@ -1059,7 +1122,7 @@ function Library:CreateWindow(title, options)
             dropButton.TextColor3 = Color3.new(1, 1, 1)
             dropButton.Font = Enum.Font.Gotham
             dropButton.TextSize = 14
-            dropButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+            dropButton.BackgroundColor3 = buttonColor
             dropButton.BorderSizePixel = 0
             dropButton.Parent = holder
             round(dropButton, 6)
@@ -1067,7 +1130,7 @@ function Library:CreateWindow(title, options)
             local dropFrame = Instance.new("Frame")
             dropFrame.Size = UDim2.new(1, 0, 0, 0)
             dropFrame.Position = UDim2.new(0, 0, 0, 36)
-            dropFrame.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
+            dropFrame.BackgroundColor3 = Color3.fromRGB(38, 38, 46)
             dropFrame.BorderSizePixel = 0
             dropFrame.Visible = false
             dropFrame.Parent = holder
@@ -1091,9 +1154,9 @@ function Library:CreateWindow(title, options)
 
             local function updateButtonText()
                 if selected ~= nil then
-                    dropButton.Text = string.format("%s : %s v", displayName, tostring(selected))
+                    dropButton.Text = string.format("%s : %s ▾", displayName, tostring(selected))
                 else
-                    dropButton.Text = string.format("%s v", displayName)
+                    dropButton.Text = string.format("%s ▾", displayName)
                 end
             end
 
@@ -1130,7 +1193,7 @@ function Library:CreateWindow(title, options)
                     local optionButton = Instance.new("TextButton")
                     optionButton.Text = tostring(option)
                     optionButton.Size = UDim2.new(1, 0, 0, 26)
-                    optionButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+                    optionButton.BackgroundColor3 = Color3.fromRGB(60, 60, 68)
                     optionButton.TextColor3 = Color3.new(1, 1, 1)
                     optionButton.Font = Enum.Font.Gotham
                     optionButton.TextSize = 13
@@ -1179,6 +1242,326 @@ function Library:CreateWindow(title, options)
                 SetOptions = function(_, newOptions)
                     optionsList = newOptions or {}
                     rebuildOptions()
+                    updateDropSize()
+                end,
+                Open = function()
+                    open = true
+                    updateDropSize()
+                end,
+                Close = function()
+                    open = false
+                    updateDropSize()
+                end,
+                Destroy = function()
+                    holder:Destroy()
+                end,
+            }
+        end
+
+        -- NEW: Checklist (multi-select dropdown with scrollable checkboxes)
+        function elements:Checklist(name, options, callback, defaultSelected)
+            options = options or {}
+            local displayName = tostring(name or "Checklist")
+            local selected = {}
+            if type(defaultSelected) == "table" then
+                for _, v in ipairs(defaultSelected) do
+                    selected[v] = true
+                end
+            end
+            local open = false
+
+            -- Config key
+            local configKeyName = string.format("checklist:%s:%s", folderName, displayName)
+            local savedData = configData[configKeyName]
+            if type(savedData) == "table" then
+                selected = {}
+                for _, v in ipairs(savedData) do
+                    selected[v] = true
+                end
+            end
+
+            local holder = Instance.new("Frame")
+            holder.Size = UDim2.new(1, 0, 0, 32)
+            holder.BackgroundTransparency = 1
+            holder.BorderSizePixel = 0
+            holder.Parent = folderFrame
+
+            local dropButton = Instance.new("TextButton")
+            dropButton.Size = UDim2.new(1, 0, 0, 32)
+            dropButton.TextColor3 = Color3.new(1, 1, 1)
+            dropButton.Font = Enum.Font.Gotham
+            dropButton.TextSize = 14
+            dropButton.BackgroundColor3 = buttonColor
+            dropButton.BorderSizePixel = 0
+            dropButton.Parent = holder
+            round(dropButton, 6)
+
+            -- Dropdown frame
+            local dropFrame = Instance.new("Frame")
+            dropFrame.Size = UDim2.new(1, 0, 0, 0)
+            dropFrame.Position = UDim2.new(0, 0, 0, 36)
+            dropFrame.BackgroundColor3 = Color3.fromRGB(38, 38, 46)
+            dropFrame.BorderSizePixel = 0
+            dropFrame.Visible = false
+            dropFrame.Parent = holder
+            round(dropFrame, 6)
+
+            -- Scrolling frame for options
+            local dropScroll = Instance.new("ScrollingFrame")
+            dropScroll.Size = UDim2.new(1, 0, 1, 0)
+            dropScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+            dropScroll.ScrollBarThickness = 4
+            dropScroll.BackgroundTransparency = 1
+            dropScroll.BorderSizePixel = 0
+            dropScroll.Parent = dropFrame
+            padding(dropScroll, 4)
+
+            local dropLayout = Instance.new("UIListLayout")
+            dropLayout.FillDirection = Enum.FillDirection.Vertical
+            dropLayout.Padding = UDim.new(0, 4)
+            dropLayout.Parent = dropScroll
+
+            -- Optional search bar
+            local searchBar = Instance.new("TextBox")
+            searchBar.Size = UDim2.new(1, 0, 0, 26)
+            searchBar.PlaceholderText = "Search..."
+            searchBar.Text = ""
+            searchBar.ClearTextOnFocus = false
+            searchBar.BackgroundColor3 = Color3.fromRGB(50, 50, 58)
+            searchBar.TextColor3 = Color3.new(1, 1, 1)
+            searchBar.Font = Enum.Font.Gotham
+            searchBar.TextSize = 13
+            searchBar.BorderSizePixel = 0
+            searchBar.Parent = dropScroll
+            round(searchBar, 5)
+
+            -- List of checkboxes container
+            local listFrame = Instance.new("Frame")
+            listFrame.Size = UDim2.new(1, 0, 0, 0)
+            listFrame.BackgroundTransparency = 1
+            listFrame.Parent = dropScroll
+
+            local listLayout = Instance.new("UIListLayout")
+            listLayout.FillDirection = Enum.FillDirection.Vertical
+            listLayout.Padding = UDim.new(0, 4)
+            listLayout.Parent = listFrame
+
+            local checkboxRows = {} -- map option -> row frame
+
+            local function updateButtonText()
+                local count = 0
+                for _, v in pairs(selected) do
+                    if v then count = count + 1 end
+                end
+                if count > 0 then
+                    dropButton.Text = string.format("%s (%d selected) ▾", displayName, count)
+                else
+                    dropButton.Text = string.format("%s ▾", displayName)
+                end
+            end
+
+            local function updateDropSize()
+                if not open then
+                    holder.Size = UDim2.new(1, 0, 0, 32)
+                    dropFrame.Visible = false
+                    return
+                end
+
+                -- Calculate height based on visible items (after filter)
+                local visibleCount = 0
+                for _, row in pairs(checkboxRows) do
+                    if row.Visible then
+                        visibleCount = visibleCount + 1
+                    end
+                end
+                -- Add search bar height + padding
+                local itemHeight = 26
+                local searchHeight = 26 + 4 -- plus padding
+                local totalHeight = searchHeight + (visibleCount * (itemHeight + 4)) + 4
+                local expandedHeight = math.min(totalHeight, 160)
+                holder.Size = UDim2.new(1, 0, 0, 36 + expandedHeight)
+                dropFrame.Size = UDim2.new(1, 0, 0, expandedHeight)
+                dropFrame.Visible = true
+                listFrame.Size = UDim2.new(1, 0, 0, visibleCount * (itemHeight + 4) + 4)
+            end
+
+            local function saveSelected()
+                local list = {}
+                for option, val in pairs(selected) do
+                    if val then
+                        table.insert(list, option)
+                    end
+                end
+                configData[configKeyName] = list
+                if not applyingConfig then
+                    saveConfig(false)
+                end
+            end
+
+            local function setSelected(option, value, triggerCallback)
+                selected[option] = value
+                updateButtonText()
+                saveSelected()
+                if triggerCallback and callback then
+                    callback(self:GetSelected())
+                end
+            end
+
+            function self:GetSelected()
+                local list = {}
+                for option, val in pairs(selected) do
+                    if val then
+                        table.insert(list, option)
+                    end
+                end
+                return list
+            end
+
+            -- Build checkboxes
+            local function rebuildCheckboxes(filter)
+                filter = filter and filter:lower() or ""
+                -- Clear existing rows
+                for _, row in pairs(checkboxRows) do
+                    row:Destroy()
+                end
+                checkboxRows = {}
+
+                for _, option in ipairs(options) do
+                    local row = Instance.new("Frame")
+                    row.Size = UDim2.new(1, 0, 0, 26)
+                    row.BackgroundTransparency = 1
+                    row.Parent = listFrame
+
+                    local box = Instance.new("TextButton")
+                    box.Size = UDim2.new(0, 20, 0, 20)
+                    box.Position = UDim2.new(0, 0, 0, 3)
+                    box.BackgroundColor3 = selected[option] and accentColor or Color3.fromRGB(60, 60, 68)
+                    box.TextColor3 = Color3.new(1, 1, 1)
+                    box.Font = Enum.Font.GothamBold
+                    box.TextSize = 14
+                    box.BorderSizePixel = 0
+                    box.Parent = row
+                    round(box, 4)
+
+                    local label = Instance.new("TextLabel")
+                    label.Size = UDim2.new(1, -26, 1, 0)
+                    label.Position = UDim2.new(0, 26, 0, 0)
+                    label.BackgroundTransparency = 1
+                    label.TextXAlignment = Enum.TextXAlignment.Left
+                    label.TextColor3 = Color3.new(1, 1, 1)
+                    label.Font = Enum.Font.Gotham
+                    label.TextSize = 13
+                    label.Text = tostring(option)
+                    label.Parent = row
+
+                    local function updateBox()
+                        box.Text = selected[option] and "✓" or ""
+                        box.BackgroundColor3 = selected[option] and accentColor or Color3.fromRGB(60, 60, 68)
+                    end
+                    updateBox()
+
+                    -- Filter visibility
+                    local function applyFilter()
+                        local show = (filter == "" or tostring(option):lower():find(filter, 1, true) ~= nil)
+                        row.Visible = show
+                    end
+                    applyFilter()
+
+                    connect(box.MouseButton1Click, function()
+                        if not alive then return end
+                        setSelected(option, not selected[option], true)
+                        updateBox()
+                        updateDropSize()
+                    end)
+
+                    connect(label.MouseButton1Click, function()
+                        if not alive then return end
+                        setSelected(option, not selected[option], true)
+                        updateBox()
+                        updateDropSize()
+                    end)
+
+                    checkboxRows[option] = row
+                end
+
+                -- Update list height
+                updateDropSize()
+            end
+
+            -- Search bar event
+            connect(searchBar:GetPropertyChangedSignal("Text"), function()
+                local filter = searchBar.Text
+                local lowerFilter = filter:lower()
+                for option, row in pairs(checkboxRows) do
+                    local show = (lowerFilter == "" or tostring(option):lower():find(lowerFilter, 1, true) ~= nil)
+                    row.Visible = show
+                end
+                updateDropSize()
+            end)
+
+            connect(listLayout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
+                listFrame.Size = UDim2.new(1, 0, 0, listLayout.AbsoluteContentSize.Y + 4)
+                dropScroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 8 + 26 + 8) -- + search bar height
+            end)
+
+            connect(dropButton.MouseButton1Click, function()
+                if not alive then return end
+                open = not open
+                if open then
+                    -- focus search bar
+                    searchBar:CaptureFocus()
+                end
+                updateDropSize()
+            end)
+
+            rebuildCheckboxes("")
+            updateButtonText()
+            updateDropSize()
+
+            -- Set default selected from config
+            if type(savedData) == "table" then
+                for _, option in ipairs(savedData) do
+                    selected[option] = true
+                end
+                -- Update visuals
+                for option, row in pairs(checkboxRows) do
+                    if row then
+                        local box = row:FindFirstChildOfClass("TextButton")
+                        if box then
+                            box.Text = selected[option] and "✓" or ""
+                            box.BackgroundColor3 = selected[option] and accentColor or Color3.fromRGB(60, 60, 68)
+                        end
+                    end
+                end
+                updateButtonText()
+                if callback then
+                    callback(self:GetSelected())
+                end
+            end
+
+            return {
+                SetSelected = function(_, newSelected)
+                    if type(newSelected) ~= "table" then return end
+                    for option, _ in pairs(selected) do selected[option] = false end
+                    for _, option in ipairs(newSelected) do
+                        selected[option] = true
+                    end
+                    for option, row in pairs(checkboxRows) do
+                        if row then
+                            local box = row:FindFirstChildOfClass("TextButton")
+                            if box then
+                                box.Text = selected[option] and "✓" or ""
+                                box.BackgroundColor3 = selected[option] and accentColor or Color3.fromRGB(60, 60, 68)
+                            end
+                        end
+                    end
+                    updateButtonText()
+                    saveSelected()
+                end,
+                GetSelected = self.GetSelected,
+                SetOptions = function(_, newOptions)
+                    options = newOptions or {}
+                    rebuildCheckboxes(searchBar.Text)
                     updateDropSize()
                 end,
                 Open = function()
