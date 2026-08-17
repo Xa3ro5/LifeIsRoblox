@@ -1258,7 +1258,6 @@ function Library:CreateWindow(title, options)
             }
         end
 
-        -- NEW: Checklist (multi-select dropdown with scrollable checkboxes)
         function elements:Checklist(name, options, callback, defaultSelected)
             options = options or {}
             local displayName = tostring(name or "Checklist")
@@ -1269,8 +1268,7 @@ function Library:CreateWindow(title, options)
                 end
             end
             local open = false
-
-            -- Config key
+        
             local configKeyName = string.format("checklist:%s:%s", folderName, displayName)
             local savedData = configData[configKeyName]
             if type(savedData) == "table" then
@@ -1279,13 +1277,13 @@ function Library:CreateWindow(title, options)
                     selected[v] = true
                 end
             end
-
+        
             local holder = Instance.new("Frame")
             holder.Size = UDim2.new(1, 0, 0, 32)
             holder.BackgroundTransparency = 1
             holder.BorderSizePixel = 0
             holder.Parent = folderFrame
-
+        
             local dropButton = Instance.new("TextButton")
             dropButton.Size = UDim2.new(1, 0, 0, 32)
             dropButton.TextColor3 = Color3.new(1, 1, 1)
@@ -1295,8 +1293,7 @@ function Library:CreateWindow(title, options)
             dropButton.BorderSizePixel = 0
             dropButton.Parent = holder
             round(dropButton, 6)
-
-            -- Dropdown frame
+        
             local dropFrame = Instance.new("Frame")
             dropFrame.Size = UDim2.new(1, 0, 0, 0)
             dropFrame.Position = UDim2.new(0, 0, 0, 36)
@@ -1305,8 +1302,7 @@ function Library:CreateWindow(title, options)
             dropFrame.Visible = false
             dropFrame.Parent = holder
             round(dropFrame, 6)
-
-            -- Scrolling frame for options
+        
             local dropScroll = Instance.new("ScrollingFrame")
             dropScroll.Size = UDim2.new(1, 0, 1, 0)
             dropScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
@@ -1315,13 +1311,12 @@ function Library:CreateWindow(title, options)
             dropScroll.BorderSizePixel = 0
             dropScroll.Parent = dropFrame
             padding(dropScroll, 4)
-
+        
             local dropLayout = Instance.new("UIListLayout")
             dropLayout.FillDirection = Enum.FillDirection.Vertical
             dropLayout.Padding = UDim.new(0, 4)
             dropLayout.Parent = dropScroll
-
-            -- Optional search bar
+        
             local searchBar = Instance.new("TextBox")
             searchBar.Size = UDim2.new(1, 0, 0, 26)
             searchBar.PlaceholderText = "Search..."
@@ -1334,20 +1329,19 @@ function Library:CreateWindow(title, options)
             searchBar.BorderSizePixel = 0
             searchBar.Parent = dropScroll
             round(searchBar, 5)
-
-            -- List of checkboxes container
+        
             local listFrame = Instance.new("Frame")
             listFrame.Size = UDim2.new(1, 0, 0, 0)
             listFrame.BackgroundTransparency = 1
             listFrame.Parent = dropScroll
-
+        
             local listLayout = Instance.new("UIListLayout")
             listLayout.FillDirection = Enum.FillDirection.Vertical
             listLayout.Padding = UDim.new(0, 4)
             listLayout.Parent = listFrame
-
-            local checkboxRows = {} -- map option -> row frame
-
+        
+            local checkboxRows = {}
+        
             local function updateButtonText()
                 local count = 0
                 for _, v in pairs(selected) do
@@ -1359,24 +1353,21 @@ function Library:CreateWindow(title, options)
                     dropButton.Text = string.format("%s ▾", displayName)
                 end
             end
-
+        
             local function updateDropSize()
                 if not open then
                     holder.Size = UDim2.new(1, 0, 0, 32)
                     dropFrame.Visible = false
                     return
                 end
-
-                -- Calculate height based on visible items (after filter)
                 local visibleCount = 0
                 for _, row in pairs(checkboxRows) do
                     if row.Visible then
                         visibleCount = visibleCount + 1
                     end
                 end
-                -- Add search bar height + padding
                 local itemHeight = 26
-                local searchHeight = 26 + 4 -- plus padding
+                local searchHeight = 26 + 4
                 local totalHeight = searchHeight + (visibleCount * (itemHeight + 4)) + 4
                 local expandedHeight = math.min(totalHeight, 160)
                 holder.Size = UDim2.new(1, 0, 0, 36 + expandedHeight)
@@ -1384,7 +1375,7 @@ function Library:CreateWindow(title, options)
                 dropFrame.Visible = true
                 listFrame.Size = UDim2.new(1, 0, 0, visibleCount * (itemHeight + 4) + 4)
             end
-
+        
             local function saveSelected()
                 local list = {}
                 for option, val in pairs(selected) do
@@ -1397,7 +1388,7 @@ function Library:CreateWindow(title, options)
                     saveConfig(false)
                 end
             end
-
+        
             local function setSelected(option, value, triggerCallback)
                 selected[option] = value
                 updateButtonText()
@@ -1406,7 +1397,7 @@ function Library:CreateWindow(title, options)
                     callback(self:GetSelected())
                 end
             end
-
+        
             function self:GetSelected()
                 local list = {}
                 for option, val in pairs(selected) do
@@ -1416,22 +1407,20 @@ function Library:CreateWindow(title, options)
                 end
                 return list
             end
-
-            -- Build checkboxes
+        
             local function rebuildCheckboxes(filter)
                 filter = filter and filter:lower() or ""
-                -- Clear existing rows
                 for _, row in pairs(checkboxRows) do
                     row:Destroy()
                 end
                 checkboxRows = {}
-
+            
                 for _, option in ipairs(options) do
                     local row = Instance.new("Frame")
                     row.Size = UDim2.new(1, 0, 0, 26)
                     row.BackgroundTransparency = 1
                     row.Parent = listFrame
-
+                
                     local box = Instance.new("TextButton")
                     box.Size = UDim2.new(0, 20, 0, 20)
                     box.Position = UDim2.new(0, 0, 0, 3)
@@ -1442,53 +1431,53 @@ function Library:CreateWindow(title, options)
                     box.BorderSizePixel = 0
                     box.Parent = row
                     round(box, 4)
-
-                    local label = Instance.new("TextLabel")
+                
+                    -- !! OPRAVA: TextLabel → TextButton, přidány vlastnosti pro vzhled
+                    local label = Instance.new("TextButton")
                     label.Size = UDim2.new(1, -26, 1, 0)
                     label.Position = UDim2.new(0, 26, 0, 0)
                     label.BackgroundTransparency = 1
+                    label.AutoButtonColor = false      -- vypne automatické zvýraznění
                     label.TextXAlignment = Enum.TextXAlignment.Left
                     label.TextColor3 = Color3.new(1, 1, 1)
                     label.Font = Enum.Font.Gotham
                     label.TextSize = 13
                     label.Text = tostring(option)
+                    label.BorderSizePixel = 0
                     label.Parent = row
-
+                
                     local function updateBox()
                         box.Text = selected[option] and "✓" or ""
                         box.BackgroundColor3 = selected[option] and accentColor or Color3.fromRGB(60, 60, 68)
                     end
                     updateBox()
-
-                    -- Filter visibility
+                
                     local function applyFilter()
                         local show = (filter == "" or tostring(option):lower():find(filter, 1, true) ~= nil)
                         row.Visible = show
                     end
                     applyFilter()
-
+                
                     connect(box.MouseButton1Click, function()
                         if not alive then return end
                         setSelected(option, not selected[option], true)
                         updateBox()
                         updateDropSize()
                     end)
-
+                
+                    -- Nyní funguje, protože label je TextButton
                     connect(label.MouseButton1Click, function()
                         if not alive then return end
                         setSelected(option, not selected[option], true)
                         updateBox()
                         updateDropSize()
                     end)
-
+                
                     checkboxRows[option] = row
                 end
-
-                -- Update list height
                 updateDropSize()
             end
-
-            -- Search bar event
+        
             connect(searchBar:GetPropertyChangedSignal("Text"), function()
                 local filter = searchBar.Text
                 local lowerFilter = filter:lower()
@@ -1498,32 +1487,29 @@ function Library:CreateWindow(title, options)
                 end
                 updateDropSize()
             end)
-
+        
             connect(listLayout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
                 listFrame.Size = UDim2.new(1, 0, 0, listLayout.AbsoluteContentSize.Y + 4)
-                dropScroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 8 + 26 + 8) -- + search bar height
+                dropScroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 8 + 26 + 8)
             end)
-
+        
             connect(dropButton.MouseButton1Click, function()
                 if not alive then return end
                 open = not open
                 if open then
-                    -- focus search bar
                     searchBar:CaptureFocus()
                 end
                 updateDropSize()
             end)
-
+        
             rebuildCheckboxes("")
             updateButtonText()
             updateDropSize()
-
-            -- Set default selected from config
+        
             if type(savedData) == "table" then
                 for _, option in ipairs(savedData) do
                     selected[option] = true
                 end
-                -- Update visuals
                 for option, row in pairs(checkboxRows) do
                     if row then
                         local box = row:FindFirstChildOfClass("TextButton")
@@ -1538,7 +1524,7 @@ function Library:CreateWindow(title, options)
                     callback(self:GetSelected())
                 end
             end
-
+        
             return {
                 SetSelected = function(_, newSelected)
                     if type(newSelected) ~= "table" then return end
@@ -1577,7 +1563,6 @@ function Library:CreateWindow(title, options)
                 end,
             }
         end
-
         return elements
     end
 
