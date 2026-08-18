@@ -225,7 +225,7 @@ function Library:CreateWindow(title, options)
     round(closeButton, 8)
     local closeHover = TweenService:Create(closeButton, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(200, 60, 60)})
     connect(closeButton.MouseEnter, function() closeHover:Play() end)
-    connect(closeButton.MouseLeave, function() closeHover:Stop() end)   -- PATCHED: Reverse → Stop
+    connect(closeButton.MouseLeave, function() closeHover:Cancel() end)   -- FIXED: Reverse → Cancel
 
     -- Minimize button
     local minimizeButton = Instance.new("TextButton")
@@ -241,7 +241,7 @@ function Library:CreateWindow(title, options)
     round(minimizeButton, 8)
     local minHover = TweenService:Create(minimizeButton, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(110, 110, 120)})
     connect(minimizeButton.MouseEnter, function() minHover:Play() end)
-    connect(minimizeButton.MouseLeave, function() minHover:Stop() end)   -- PATCHED
+    connect(minimizeButton.MouseLeave, function() minHover:Cancel() end)   -- FIXED
 
     -- Restore button
     local restoreButton = Instance.new("TextButton")
@@ -258,7 +258,7 @@ function Library:CreateWindow(title, options)
     round(restoreButton, 8)
     local resHover = TweenService:Create(restoreButton, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(88, 88, 98)})
     connect(restoreButton.MouseEnter, function() resHover:Play() end)
-    connect(restoreButton.MouseLeave, function() resHover:Stop() end)   -- PATCHED
+    connect(restoreButton.MouseLeave, function() resHover:Cancel() end)   -- FIXED
 
     local body = Instance.new("Frame")
     body.Size = UDim2.new(1, 0, 1, -34)
@@ -715,7 +715,7 @@ function Library:CreateWindow(title, options)
 
             local hover = TweenService:Create(button, TweenInfo.new(0.15), {BackgroundColor3 = hoverColor})
             connect(button.MouseEnter, function() if enabled then hover:Play() end end)
-            connect(button.MouseLeave, function() hover:Stop() end)   -- PATCHED
+            connect(button.MouseLeave, function() hover:Cancel() end)   -- FIXED
 
             connect(button.MouseButton1Click, function()
                 if not alive or not enabled then
