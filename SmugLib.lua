@@ -225,7 +225,7 @@ function Library:CreateWindow(title, options)
     round(closeButton, 8)
     local closeHover = TweenService:Create(closeButton, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(200, 60, 60)})
     connect(closeButton.MouseEnter, function() closeHover:Play() end)
-    connect(closeButton.MouseLeave, function() closeHover:Reverse() end)
+    connect(closeButton.MouseLeave, function() closeHover:Stop() end)   -- PATCHED: Reverse → Stop
 
     -- Minimize button
     local minimizeButton = Instance.new("TextButton")
@@ -241,7 +241,7 @@ function Library:CreateWindow(title, options)
     round(minimizeButton, 8)
     local minHover = TweenService:Create(minimizeButton, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(110, 110, 120)})
     connect(minimizeButton.MouseEnter, function() minHover:Play() end)
-    connect(minimizeButton.MouseLeave, function() minHover:Reverse() end)
+    connect(minimizeButton.MouseLeave, function() minHover:Stop() end)   -- PATCHED
 
     -- Restore button
     local restoreButton = Instance.new("TextButton")
@@ -258,7 +258,7 @@ function Library:CreateWindow(title, options)
     round(restoreButton, 8)
     local resHover = TweenService:Create(restoreButton, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(88, 88, 98)})
     connect(restoreButton.MouseEnter, function() resHover:Play() end)
-    connect(restoreButton.MouseLeave, function() resHover:Reverse() end)
+    connect(restoreButton.MouseLeave, function() resHover:Stop() end)   -- PATCHED
 
     local body = Instance.new("Frame")
     body.Size = UDim2.new(1, 0, 1, -34)
@@ -715,7 +715,7 @@ function Library:CreateWindow(title, options)
 
             local hover = TweenService:Create(button, TweenInfo.new(0.15), {BackgroundColor3 = hoverColor})
             connect(button.MouseEnter, function() if enabled then hover:Play() end end)
-            connect(button.MouseLeave, function() hover:Reverse() end)
+            connect(button.MouseLeave, function() hover:Stop() end)   -- PATCHED
 
             connect(button.MouseButton1Click, function()
                 if not alive or not enabled then
@@ -1432,12 +1432,11 @@ function Library:CreateWindow(title, options)
                     box.Parent = row
                     round(box, 4)
                 
-                    -- !! OPRAVA: TextLabel → TextButton, přidány vlastnosti pro vzhled
                     local label = Instance.new("TextButton")
                     label.Size = UDim2.new(1, -26, 1, 0)
                     label.Position = UDim2.new(0, 26, 0, 0)
                     label.BackgroundTransparency = 1
-                    label.AutoButtonColor = false      -- vypne automatické zvýraznění
+                    label.AutoButtonColor = false
                     label.TextXAlignment = Enum.TextXAlignment.Left
                     label.TextColor3 = Color3.new(1, 1, 1)
                     label.Font = Enum.Font.Gotham
@@ -1465,7 +1464,6 @@ function Library:CreateWindow(title, options)
                         updateDropSize()
                     end)
                 
-                    -- Nyní funguje, protože label je TextButton
                     connect(label.MouseButton1Click, function()
                         if not alive then return end
                         setSelected(option, not selected[option], true)
