@@ -7,7 +7,7 @@ local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
 
--- ---------- Theme (odpovídá screenshotu) ----------
+-- ---------- Theme ----------
 local Theme = {
     Background     = Color3.fromRGB(16, 16, 20),
     Panel          = Color3.fromRGB(22, 22, 28),
@@ -50,8 +50,22 @@ end
 
 local function keyLabel(key)
     if not key then return "?" end
-    if typeof(key) == "EnumItem" then return key.Name end
+    if typeof(key) == "EnumItem" then
+        if key == Enum.UserInputType.MouseButton1 then return "M1" end
+        if key == Enum.UserInputType.MouseButton2 then return "M2" end
+        if key == Enum.UserInputType.MouseButton3 then return "M3" end
+        return key.Name
+    end
     return tostring(key)
+end
+
+local function normalizeInput(k)
+    if typeof(k) == "EnumItem" then return k end
+    if type(k) == "string" then
+        if Enum.KeyCode[k] then return Enum.KeyCode[k] end
+        if Enum.UserInputType[k] then return Enum.UserInputType[k] end
+    end
+    return nil
 end
 
 -- ==========================================================================
@@ -234,12 +248,16 @@ local function buildElements(ctx, parent)
     end
 
     -- ------------------------------------------------------------------
-    -- Checkbox / Toggle (stejný vizuál, drobný rozdíl)
+    -- Checkbox / Toggle
     -- ------------------------------------------------------------------
     local function makeCheckboxRow(text, callback, defaultState, bindKey, configKeyName)
         local displayText = tostring(text or "Checkbox")
         local savedState = ctx.configData[configKeyName]
         local state = (savedState ~= nil) and (savedState == true) or (defaultState == true)
+
+        -- Bind (podpora KeyCode i Mouse)
+        local currentBind = normalizeInput(bindKey) or nil
+        local listening = false
 
         local row = Instance.new("Frame")
         row.Size = UDim2.new(1, 0, 0, 22)
@@ -277,16 +295,18 @@ local function buildElements(ctx, parent)
         label.AutoButtonColor = false
         label.Parent = row
 
-        if bindKey then
-            local bindBadge = Instance.new("TextLabel")
+        local bindBadge
+        if currentBind then
+            bindBadge = Instance.new("TextButton")
             bindBadge.Size = UDim2.new(0, 34, 0, 16)
             bindBadge.Position = UDim2.new(1, -34, 0, 3)
             bindBadge.BackgroundColor3 = Theme.Input
             bindBadge.TextColor3 = Theme.TextDim
             bindBadge.Font = Enum.Font.GothamBold
             bindBadge.TextSize = 10
-            bindBadge.Text = keyLabel(bindKey)
+            bindBadge.Text = keyLabel(currentBind)
             bindBadge.BorderSizePixel = 0
+            bindBadge.AutoButtonColor = false
             bindBadge.Parent = row
             round(bindBadge, 3)
             label.Size = UDim2.new(1, -64, 1, 0)
@@ -325,11 +345,65 @@ local function buildElements(ctx, parent)
             setState(not state, true)
         end)
 
+        -- Bind badge interakce
+        if bindBadge then
+            ctx.connect(bindBadge.MouseButton1Click, function()
+                if not ctx.alive() then return end
+                listening = true
+                bindBadge.Text = "..."
+                bindBadge.BackgroundColor3 = Theme.Accent
+            end)
+        end
+
+        -- Globální handler pro bind (i spouštění)
+        ctx.connect(UIS.InputBegan, function(input, gameProcessed)
+            if not ctx.alive() then return end
+            if listening then
+                if input.UserInputType == Enum.UserInputType.Keyboard then
+                    currentBind = input.KeyCode
+                elseif input.UserInputType == Enum.UserInputType.MouseButton1
+                    or input.UserInputType == Enum.UserInputType.MouseButton2
+                    or input.UserInputType == Enum.UserInputType.MouseButton3 then
+                    currentBind = input.UserInputType
+                else
+                    return
+                end
+                listening = false
+                if bindBadge then
+                    bindBadge.BackgroundColor3 = Theme.Input
+                    bindBadge.Text = keyLabel(currentBind)
+                end
+                ctx.configData[configKeyName .. ":bind"] = currentBind.Name
+                if not ctx.isApplying() then ctx.saveConfig(false) end
+                return
+            end
+            if gameProcessed then return end
+            if not currentBind then return end
+
+            local matches = false
+            if typeof(currentBind) == "EnumItem" and currentBind.EnumType == Enum.KeyCode then
+                matches = (input.KeyCode == currentBind)
+            elseif typeof(currentBind) == "EnumItem" and currentBind.EnumType == Enum.UserInputType then
+                matches = (input.UserInputType == currentBind)
+            end
+            if matches then
+                setState(not state, true)
+            end
+        end)
+
         return {
             Set = function(_, v) setState(v, false) end,
             Get = function() return state end,
             Toggle = function() setState(not state, true) end,
             SetText = function(_, v) displayText = tostring(v or "Checkbox"); label.Text = displayText end,
+            SetKey = function(_, k)
+                local n = normalizeInput(k)
+                if n then
+                    currentBind = n
+                    if bindBadge then bindBadge.Text = keyLabel(n) end
+                end
+            end,
+            GetKey = function() return currentBind end,
             Destroy = function() row:Destroy() end,
         }
     end
@@ -523,8 +597,7 @@ local function buildElements(ctx, parent)
     function elements:Bind(text, key, callback)
         local configKeyName = scopeKey("bind:" .. tostring(text))
         local saved = ctx.configData[configKeyName]
-        local current = key or Enum.KeyCode.E
-        if saved and Enum.KeyCode[saved] then current = Enum.KeyCode[saved] end
+        local current = normalizeInput(key) or normalizeInput(saved) or Enum.KeyCode.E
         local listening = false
         local displayText = tostring(text or "Bind")
 
@@ -560,6 +633,7 @@ local function buildElements(ctx, parent)
         local function updateText() badge.Text = keyLabel(current) end
 
         ctx.connect(badge.MouseButton1Click, function()
+            if not ctx.alive() then return end
             listening = true
             badge.Text = "..."
             badge.BackgroundColor3 = Theme.Accent
@@ -570,26 +644,37 @@ local function buildElements(ctx, parent)
             if listening then
                 if input.UserInputType == Enum.UserInputType.Keyboard then
                     current = input.KeyCode
-                    listening = false
-                    badge.BackgroundColor3 = Theme.Input
-                    updateText()
-                    ctx.configData[configKeyName] = current.Name
-                    if not ctx.isApplying() then ctx.saveConfig(false) end
+                elseif input.UserInputType == Enum.UserInputType.MouseButton1
+                    or input.UserInputType == Enum.UserInputType.MouseButton2
+                    or input.UserInputType == Enum.UserInputType.MouseButton3 then
+                    current = input.UserInputType
+                else
+                    return
                 end
+                listening = false
+                badge.BackgroundColor3 = Theme.Input
+                updateText()
+                ctx.configData[configKeyName] = current.Name
+                if not ctx.isApplying() then ctx.saveConfig(false) end
                 return
             end
             if gameProcessed then return end
-            if input.KeyCode == current and callback then callback() end
+
+            local matches = false
+            if typeof(current) == "EnumItem" and current.EnumType == Enum.KeyCode then
+                matches = (input.KeyCode == current)
+            elseif typeof(current) == "EnumItem" and current.EnumType == Enum.UserInputType then
+                matches = (input.UserInputType == current)
+            end
+            if matches and callback then callback() end
         end)
 
         updateText()
 
         return {
             SetKey = function(_, k)
-                if typeof(k) == "EnumItem" and k.EnumType == Enum.KeyCode then
-                    current = k
-                    updateText()
-                end
+                local n = normalizeInput(k)
+                if n then current = n; updateText() end
             end,
             GetKey = function() return current end,
             Destroy = function() row:Destroy() end,
@@ -778,7 +863,7 @@ local function buildElements(ctx, parent)
     end
 
     -- ------------------------------------------------------------------
-    -- Checklist (multi-select dropdown se search barem)
+    -- Checklist
     -- ------------------------------------------------------------------
     function elements:Checklist(name, options, callback, defaultSelected)
         options = options or {}
@@ -1080,16 +1165,36 @@ function Library:CreateWindow(title, options)
     options = options or {}
 
     local alive = true
+    local destroyed = false
+    local generation = 0
     local connections = {}
+    local tweens = {}
+
     local function connect(sig, fn)
         local c = sig:Connect(fn)
         table.insert(connections, c)
         return c
     end
+
+    local function trackTween(t)
+        table.insert(tweens, t)
+        return t
+    end
+
     local function disconnectAll()
-        for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
+        for _, c in ipairs(connections) do
+            pcall(function() c:Disconnect() end)
+        end
         table.clear(connections)
     end
+
+    local function killTweens()
+        for _, t in ipairs(tweens) do
+            pcall(function() t:Cancel() end)
+        end
+        table.clear(tweens)
+    end
+
     local function isAlive() return alive end
 
     local width         = options.Width or 540
@@ -1202,13 +1307,14 @@ function Library:CreateWindow(title, options)
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.Parent = titleBar
 
-    -- Close / Terminate (top right)
+    -- Terminate (X) top right
     local closeButton = Instance.new("TextButton")
+    closeButton.Name = "TerminateButton"
     closeButton.Size = UDim2.new(0, 22, 0, 22)
     closeButton.Position = UDim2.new(1, -28, 0, 4)
     closeButton.Text = "✕"
     closeButton.Font = Enum.Font.GothamBold
-    closeButton.TextSize = 12
+    closeButton.TextSize = 13
     closeButton.BackgroundColor3 = Theme.Close
     closeButton.TextColor3 = Color3.new(1, 1, 1)
     closeButton.BorderSizePixel = 0
@@ -1281,6 +1387,7 @@ function Library:CreateWindow(title, options)
     local function notify(text, duration)
         if not alive then return end
         duration = duration or 3
+        local myGen = generation
 
         local frame = Instance.new("Frame")
         frame.Size = UDim2.new(0, 260, 0, 34)
@@ -1309,28 +1416,30 @@ function Library:CreateWindow(title, options)
         label.Parent = frame
 
         frame.Position = UDim2.new(0.5, -130, 0, -50)
-        local fadeIn = TweenService:Create(
+        local fadeIn = trackTween(TweenService:Create(
             frame,
             TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
             { Position = UDim2.new(0.5, -130, 0, 0) }
-        )
+        ))
         fadeIn:Play()
 
         task.delay(duration, function()
+            if myGen ~= generation then return end
             if not frame.Parent then return end
-            local fadeOut = TweenService:Create(
+            local fadeOut = trackTween(TweenService:Create(
                 frame,
                 TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
                 { BackgroundTransparency = 1 }
-            )
+            ))
             fadeOut:Play()
-            local fadeOut2 = TweenService:Create(
+            local fadeOut2 = trackTween(TweenService:Create(
                 stroke,
                 TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
                 { Transparency = 1 }
-            )
+            ))
             fadeOut2:Play()
             task.wait(0.31)
+            if myGen ~= generation then return end
             if frame then frame:Destroy() end
         end)
     end
@@ -1375,13 +1484,32 @@ function Library:CreateWindow(title, options)
 
     makeDraggable(titleBar, main)
 
-    -- ------------------ Destroy ------------------
+    -- ------------------ Destroy (nuke everything) ------------------
     local function destroyWindow()
-        if not alive then return end
+        if destroyed then return end
+        destroyed = true
         alive = false
+        generation = generation + 1
+
+        -- 1) onClose callback
         if onClose then pcall(onClose) end
+
+        -- 2) Cancel all tweens
+        killTweens()
+
+        -- 3) Disconnect all connections (incl. dynamic drag handlers)
         disconnectAll()
-        if screenGui then screenGui:Destroy() end
+
+        -- 4) Clear config bindings (release GUI refs)
+        for k in pairs(configBindings) do
+            configBindings[k] = nil
+        end
+
+        -- 5) Destroy toast host
+        if toastHost then pcall(function() toastHost:Destroy() end) end
+
+        -- 6) Destroy whole ScreenGui
+        if screenGui then pcall(function() screenGui:Destroy() end) end
     end
 
     connect(closeButton.MouseButton1Click, destroyWindow)
@@ -1393,11 +1521,11 @@ function Library:CreateWindow(title, options)
         end
     end)
 
-    TweenService:Create(
+    trackTween(TweenService:Create(
         main,
         TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
         { Position = UDim2.new(0.5, -math.floor(width / 2), 0.5, -math.floor(height / 2)) }
-    ):Play()
+    )):Play()
 
     -- ------------------ Tabs ------------------
     local tabs = {}
@@ -1500,6 +1628,7 @@ function Library:CreateWindow(title, options)
     function window:Notify(text, duration) notify(text, duration) end
     function window:Destroy() destroyWindow() end
     function window:SetOnClose(cb) onClose = cb end
+    function window:Kill() destroyWindow() end
 
     function window:GetConfig() return configData end
     function window:GetConfigInfo()
@@ -1567,6 +1696,24 @@ function Library:CreateWindow(title, options)
 
     notify(string.format("%s loaded successfully!", tostring(title or "SmugLib")), 2.5)
     return window
+end
+
+-- Global fallback: kill all SmugLibCore GUIs
+function Library:DestroyAll()
+    local function tryKill(container)
+        if not container then return end
+        for _, gui in ipairs(container:GetChildren()) do
+            if gui.Name == "SmugLibCore" then
+                pcall(function() gui:Destroy() end)
+            end
+        end
+    end
+    tryKill(CoreGui)
+    local plr = game:GetService("Players").LocalPlayer
+    if plr then
+        local pg = plr:FindFirstChildOfClass("PlayerGui")
+        if pg then tryKill(pg) end
+    end
 end
 
 return Library
