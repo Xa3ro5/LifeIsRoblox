@@ -12,7 +12,7 @@ local Theme = {
     Background     = Color3.fromRGB(16, 16, 20),
     Panel          = Color3.fromRGB(22, 22, 28),
     SectionBody    = Color3.fromRGB(20, 20, 26),
-    SectionHeader  = Color3.fromRGB(56, 68, 150),
+    SectionHeader  = Color3.fromRGB(35, 44, 72),
     Input          = Color3.fromRGB(30, 30, 40),
     InputHover     = Color3.fromRGB(42, 42, 55),
     Accent         = Color3.fromRGB(88, 104, 220),
@@ -37,6 +37,256 @@ local function resolveGuiParent()
         if ok and value then return value end
     end
     return CoreGui
+end
+
+-- Keyforge gate: loading this module yields until the current account verifies.
+-- Place the library load before any protected code or task.spawn in the caller.
+-- Change this URL when moving Keyforge from local development to HTTPS hosting.
+local KEYFORGE_URL = "http://localhost:3000"
+local function awaitKeyforge()
+    local Players = game:GetService("Players")
+    local player = Players.LocalPlayer
+    if not player or player.UserId <= 0 then
+        error("[Keyforge] Je vyzadovan Roblox klient s platnym UserId.", 0)
+    end
+    local accountId = string.format("%.0f", player.UserId)
+    local env = (type(getgenv) == "function" and getgenv()) or _G
+    local previous = env.SmugLibKeyforgeGate
+    if type(previous) == "table" and type(previous.Cancel) == "function" then
+        previous.Cancel()
+    end
+
+    local state = { cancelled = false, verified = false, busy = false }
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "SmugLibKeyforge"
+    gui.ResetOnSpawn = false
+    gui.DisplayOrder = 10000
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    local connections = {}
+    local function cleanup()
+        for _, connection in ipairs(connections) do connection:Disconnect() end
+        table.clear(connections)
+        gui:Destroy()
+        if env.SmugLibKeyforgeGate == state then env.SmugLibKeyforgeGate = nil end
+    end
+    function state.Cancel()
+        state.cancelled = true
+        cleanup()
+    end
+    env.SmugLibKeyforgeGate = state
+    local cacheId = KEYFORGE_URL .. "\n" .. accountId
+    if type(env.SmugLibKeyforgeKeys) ~= "table" then env.SmugLibKeyforgeKeys = {} end
+    local cache = env.SmugLibKeyforgeKeys
+    local cacheFolder = "SmugLibKeyforge"
+    local cacheFile = cacheFolder .. "/" .. accountId .. ".json"
+    local function validKey(key)
+        return type(key) == "string" and #key == 44
+            and key:match("^%x%x%x%x%x%x%x%x%-%x%x%x%x%x%x%x%x%-%x%x%x%x%x%x%x%x%-%x%x%x%x%x%x%x%x%-%x%x%x%x%x%x%x%x$") ~= nil
+    end
+    local function remember(key)
+        cache[cacheId] = key
+        if type(writefile) == "function" and type(makefolder) == "function" then
+            pcall(function()
+                if type(isfolder) ~= "function" or not isfolder(cacheFolder) then
+                    pcall(makefolder, cacheFolder)
+                end
+                writefile(cacheFile, HttpService:JSONEncode({
+                    version = 1, baseUrl = KEYFORGE_URL, robloxUserId = accountId, key = key,
+                }))
+            end)
+        end
+    end
+    local function forget()
+        cache[cacheId] = nil
+        -- An empty record also invalidates the cache when delfile is unavailable.
+        if type(writefile) == "function" then pcall(writefile, cacheFile, "{}") end
+    end
+    local cachedKey = cache[cacheId]
+    if not validKey(cachedKey) and type(readfile) == "function" then
+        local ok, record = pcall(function()
+            local text = readfile(cacheFile)
+            if #text > 2048 then return nil end
+            return HttpService:JSONDecode(text)
+        end)
+        if ok and type(record) == "table" and record.version == 1
+            and record.baseUrl == KEYFORGE_URL and record.robloxUserId == accountId
+            and validKey(record.key) then cachedKey = record.key end
+    end
+    local requestFn = request or http_request
+    if type(requestFn) ~= "function" and type(syn) == "table" then requestFn = syn.request end
+    if type(requestFn) ~= "function" and type(http) == "table" then requestFn = http.request end
+    if type(requestFn) ~= "function" then
+        requestFn = function(options) return HttpService:RequestAsync(options) end
+    end
+    local function verifyKey(key)
+        local finished, responseOk, response = false, false, nil
+        task.spawn(function()
+            local ok, result = pcall(requestFn, {
+                Url = KEYFORGE_URL .. "/api/v1/license/verify",
+                Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = HttpService:JSONEncode({ key = key, robloxUserId = accountId }),
+            })
+            responseOk, response, finished = ok, result, true
+        end)
+        local deadline = os.clock() + 15
+        while not finished and not state.cancelled and os.clock() < deadline do task.wait(0.05) end
+        if state.cancelled then return false, "CANCELLED" end
+        if not finished or not responseOk or type(response) ~= "table" then
+            return false, "SERVICE_UNAVAILABLE"
+        end
+        local decoded, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
+        if not decoded or type(data) ~= "table" then return false, "INVALID_RESPONSE" end
+        local code = tonumber(response.StatusCode)
+        if not code and response.Success == true then code = 200 end
+        if code == 200 and data.success == true and data.robloxUserId == accountId
+            and type(data.sessionToken) == "string" and #data.sessionToken >= 32
+            and type(data.expiresAt) == "string" then return true end
+        if (code == 401 and data.error == "INVALID_KEY")
+            or (code == 403 and data.error == "ACCOUNT_MISMATCH") then
+            if cache[cacheId] == key or cachedKey == key then forget() end
+        end
+        return false, data.error or "INVALID_RESPONSE"
+    end
+    if validKey(cachedKey) then
+        local verified = verifyKey(cachedKey)
+        if verified and not state.cancelled then
+            remember(cachedKey)
+            state.verified = true
+            cleanup()
+            return
+        end
+    end
+    if state.cancelled then
+        cleanup()
+        error("[Keyforge] Overeni zruseno. Skript nebyl spusten.", 0)
+    end
+    local parentOk = pcall(function() gui.Parent = resolveGuiParent() end)
+    if not parentOk then gui.Parent = player:WaitForChild("PlayerGui") end
+
+    local backdrop = Instance.new("Frame")
+    backdrop.Size = UDim2.fromScale(1, 1)
+    backdrop.BackgroundColor3 = Color3.new(0, 0, 0)
+    backdrop.BackgroundTransparency = 0.35
+    backdrop.BorderSizePixel = 0
+    backdrop.Active = true
+    backdrop.Parent = gui
+    local panel = Instance.new("Frame")
+    panel.AnchorPoint = Vector2.new(0.5, 0.5)
+    panel.Position = UDim2.fromScale(0.5, 0.5)
+    panel.Size = UDim2.new(0.9, 0, 0, 320)
+    panel.BackgroundColor3 = Theme.Panel
+    panel.BorderSizePixel = 0
+    panel.Parent = backdrop
+    round(panel, 10)
+    local constraint = Instance.new("UISizeConstraint")
+    constraint.MaxSize = Vector2.new(470, 320)
+    constraint.Parent = panel
+
+    local function label(text, y, height, size, color)
+        local item = Instance.new("TextLabel")
+        item.Position = UDim2.new(0, 22, 0, y)
+        item.Size = UDim2.new(1, -44, 0, height)
+        item.BackgroundTransparency = 1
+        item.Font = Enum.Font.Gotham
+        item.TextSize = size
+        item.TextColor3 = color or Theme.Text
+        item.TextWrapped = true
+        item.Text = text
+        item.Parent = panel
+        return item
+    end
+    label("KEYFORGE / SMUGLIB", 20, 30, 22).Font = Enum.Font.GothamBold
+    label("Vygeneruj klic na Keyforge a vloz ho sem.\nBezne klice se zamknou na tento Roblox ucet.", 55, 48, 13, Theme.TextDim)
+    label(player.Name .. "  /  UserId " .. accountId, 105, 22, 12, Theme.TextDim)
+    local input = Instance.new("TextBox")
+    input.Name = "Key"
+    input.Position = UDim2.new(0, 22, 0, 137)
+    input.Size = UDim2.new(1, -44, 0, 42)
+    input.BackgroundColor3 = Theme.Input
+    input.TextColor3 = Theme.Text
+    input.PlaceholderText = "Vloz svuj Keyforge klic"
+    input.PlaceholderColor3 = Theme.TextDim
+    input.Text = ""
+    input.ClearTextOnFocus = false
+    input.TextSize = 13
+    input.Font = Enum.Font.Gotham
+    input.Parent = panel
+    round(input, 6)
+    local function button(text, x)
+        local item = Instance.new("TextButton")
+        item.Position = UDim2.new(x, x == 0 and 22 or 4, 0, 191)
+        item.Size = UDim2.new(0.5, -26, 0, 40)
+        item.BackgroundColor3 = Theme.Accent
+        item.TextColor3 = Theme.Text
+        item.Font = Enum.Font.GothamBold
+        item.TextSize = 14
+        item.Text = text
+        item.Parent = panel
+        round(item, 6)
+        return item
+    end
+    local getKey = button("Get Key", 0)
+    local verify = button("Verify!", 0.5)
+    local status = label("Ceka na overeni klice.", 240, 43, 12, Theme.TextDim)
+    local close = Instance.new("TextButton")
+    close.Position = UDim2.new(1, -33, 0, 3)
+    close.Size = UDim2.fromOffset(30, 24)
+    close.BackgroundTransparency = 1
+    close.Text = "X"
+    close.Font = Enum.Font.GothamBold
+    close.TextSize = 15
+    close.TextColor3 = Theme.TextDim
+    close.Parent = panel
+
+    local messages = {
+        INVALID_KEY = "Klic je neplatny, expirovany nebo zruseny.",
+        ACCOUNT_MISMATCH = "Tento klic je uz zamceny na jiny Roblox ucet.",
+        RATE_LIMITED = "Prilis mnoho pokusu. Pockej a zkus to znovu.",
+        INVALID_INPUT = "Nespravny format klice nebo uctu.",
+        SERVICE_UNAVAILABLE = "Keyforge neni dostupny. Spust localhost:3000 a zkus to znovu.",
+        INVALID_RESPONSE = "Keyforge vratil neplatnou odpoved.",
+    }
+    local function submit()
+        if state.busy or state.cancelled or state.verified then return end
+        local key = input.Text:match("^%s*(.-)%s*$")
+        if not validKey(key) then
+            status.Text = messages.INVALID_INPUT
+            return
+        end
+        state.busy = true
+        verify.Text = "Overuji..."
+        status.Text = "Spojuji se s Keyforge..."
+        local verified, reason = verifyKey(key)
+        if state.cancelled then return end
+        state.busy = false
+        verify.Text = "Verify!"
+        if not verified then
+            status.Text = messages[reason] or "Overeni selhalo. Zkus to znovu."
+            return
+        end
+        remember(key)
+        state.verified = true
+        input.Text = ""
+        cleanup()
+    end
+    table.insert(connections, close.Activated:Connect(state.Cancel))
+    table.insert(connections, gui.Destroying:Connect(function() state.cancelled = not state.verified end))
+    table.insert(connections, verify.Activated:Connect(submit))
+    table.insert(connections, input.FocusLost:Connect(function(enter) if enter then submit() end end))
+    table.insert(connections, getKey.Activated:Connect(function()
+        local url = KEYFORGE_URL .. "/keys"
+        if type(setclipboard) == "function" then
+            local ok = pcall(setclipboard, url)
+            if ok then status.Text = "Odkaz zkopirovan. Otevri ho v prohlizeci: " .. url; return end
+        end
+        status.Text = "Otevri v prohlizeci: " .. url
+    end))
+    while not state.verified and not state.cancelled do task.wait(0.05) end
+    if not state.verified then
+        cleanup()
+        error("[Keyforge] Overeni zruseno. Skript nebyl spusten.", 0)
+    end
 end
 
 local function clampNumber(v, mn, mx) return math.clamp(v, mn, mx) end
@@ -72,6 +322,7 @@ end
 --  Element factory
 -- ==========================================================================
 local function buildElements(ctx, parent)
+    local Theme = ctx.theme or Theme
     local elements = {}
     local order = 0
     local function nextOrder() order = order + 1; return order end
@@ -156,10 +407,12 @@ local function buildElements(ctx, parent)
     function elements:Label(text)
         local label = Instance.new("TextLabel")
         label.Size = UDim2.new(1, 0, 0, 18)
+        label.AutomaticSize = Enum.AutomaticSize.Y
+        label.TextWrapped = true
         label.BackgroundTransparency = 1
         label.Font = Enum.Font.Gotham
         label.Text = tostring(text or "")
-        label.TextSize = 12
+        label.TextSize = 13
         label.TextColor3 = Theme.Text
         label.TextXAlignment = Enum.TextXAlignment.Left
         label.LayoutOrder = nextOrder()
@@ -357,7 +610,7 @@ local function buildElements(ctx, parent)
 
         -- Globální handler pro bind (i spouštění)
         ctx.connect(UIS.InputBegan, function(input, gameProcessed)
-            if not ctx.alive() then return end
+            if not ctx.alive() or UIS:GetFocusedTextBox() then return end
             if listening then
                 if input.UserInputType == Enum.UserInputType.Keyboard then
                     currentBind = input.KeyCode
@@ -431,13 +684,13 @@ local function buildElements(ctx, parent)
         defaultValue = tonumber(defaultValue) or minValue
 
         local holder = Instance.new("Frame")
-        holder.Size = UDim2.new(1, 0, 0, 36)
+        holder.Size = UDim2.new(1, 0, 0, 48)
         holder.BackgroundTransparency = 1
         holder.LayoutOrder = nextOrder()
         holder.Parent = parent
 
         local topRow = Instance.new("Frame")
-        topRow.Size = UDim2.new(1, 0, 0, 14)
+        topRow.Size = UDim2.new(1, 0, 0, 22)
         topRow.BackgroundTransparency = 1
         topRow.Parent = holder
 
@@ -449,22 +702,27 @@ local function buildElements(ctx, parent)
         label.TextSize = 12
         label.TextColor3 = Theme.Text
         label.TextXAlignment = Enum.TextXAlignment.Left
+        label.TextTruncate = Enum.TextTruncate.AtEnd
         label.Parent = topRow
 
-        local valueText = Instance.new("TextLabel")
+        local valueText = Instance.new("TextBox")
+        valueText.Name = "NumericInput"
+        valueText.ClearTextOnFocus = false
         valueText.Size = UDim2.new(0, 80, 1, 0)
         valueText.Position = UDim2.new(1, -80, 0, 0)
-        valueText.BackgroundTransparency = 1
+        valueText.BackgroundColor3 = Theme.Input
+        valueText.BorderSizePixel = 0
         valueText.Text = ""
         valueText.Font = Enum.Font.Gotham
         valueText.TextSize = 12
-        valueText.TextColor3 = Theme.TextDim
-        valueText.TextXAlignment = Enum.TextXAlignment.Right
+        valueText.TextColor3 = Theme.Text
+        valueText.TextXAlignment = Enum.TextXAlignment.Center
         valueText.Parent = topRow
+        round(valueText, 3)
 
         local bar = Instance.new("Frame")
         bar.Size = UDim2.new(1, 0, 0, 16)
-        bar.Position = UDim2.new(0, 0, 0, 18)
+        bar.Position = UDim2.new(0, 0, 0, 28)
         bar.BackgroundColor3 = Theme.Input
         bar.BorderSizePixel = 0
         bar.Parent = holder
@@ -508,7 +766,7 @@ local function buildElements(ctx, parent)
             fill.Size = UDim2.new(percent, 0, 1, 0)
             local txt = string.format("%s/%s", tostring(value), tostring(maxValue))
             fillText.Text = txt
-            valueText.Text = txt
+            if not valueText:IsFocused() then valueText.Text = tostring(value) end
             ctx.configData[configKeyName] = value
             if not ctx.isApplying() then ctx.saveConfig(false) end
             if trigger and callback then callback(value) end
@@ -519,6 +777,15 @@ local function buildElements(ctx, parent)
             local pct = clampNumber((x - bar.AbsolutePosition.X) / w, 0, 1)
             setValue(minValue + (maxValue - minValue) * pct, true)
         end
+
+        ctx.connect(valueText.FocusLost, function()
+            if not ctx.alive() then return end
+            local input = tonumber((valueText.Text:gsub(",", ".")))
+            if input and input == input and math.abs(input) < math.huge then
+                setValue(input, true)
+            end
+            valueText.Text = tostring(value)
+        end)
 
         ctx.connect(bar.InputBegan, function(input)
             if input.UserInputType ~= Enum.UserInputType.MouseButton1
@@ -640,7 +907,7 @@ local function buildElements(ctx, parent)
         end)
 
         ctx.connect(UIS.InputBegan, function(input, gameProcessed)
-            if not ctx.alive() then return end
+            if not ctx.alive() or UIS:GetFocusedTextBox() then return end
             if listening then
                 if input.UserInputType == Enum.UserInputType.Keyboard then
                     current = input.KeyCode
@@ -1163,8 +1430,11 @@ end
 -- ==========================================================================
 function Library:CreateWindow(title, options)
     options = options or {}
+    -- Styling one window must not modify other existing/future windows.
+    local Theme = table.clone(Theme)
 
     local alive = true
+    local minimized = false
     local destroyed = false
     local generation = 0
     local connections = {}
@@ -1197,8 +1467,8 @@ function Library:CreateWindow(title, options)
 
     local function isAlive() return alive end
 
-    local width         = options.Width or 540
-    local height        = options.Height or 380
+    local width         = math.max(240, tonumber(options.Width) or 540)
+    local height        = math.max(220, tonumber(options.Height) or 380)
     local toggleKey     = options.ToggleKey or Enum.KeyCode.RightShift
     local onClose       = options.OnClose
 
@@ -1240,9 +1510,20 @@ function Library:CreateWindow(title, options)
         end
     end
 
+    local saveQueued = false
     local function saveConfig(force)
         if not canPersist() then return end
         if not force and not configAutoSave then return end
+        if not force then
+            if saveQueued then return end
+            saveQueued = true
+            local saveGeneration = generation
+            task.delay(0.4, function()
+                saveQueued = false
+                if alive and generation == saveGeneration then saveConfig(true) end
+            end)
+            return
+        end
         local ok, encoded = pcall(function() return HttpService:JSONEncode(configData) end)
         if ok and encoded then
             pcall(function() writefile(configFile, encoded) end)
@@ -1275,6 +1556,29 @@ function Library:CreateWindow(title, options)
     main.BorderSizePixel = 0
     main.Parent = screenGui
     round(main, 6)
+    local function fitViewport()
+        local camera = workspace.CurrentCamera
+        if not camera then return end
+        local viewport = camera.ViewportSize
+        if viewport.X <= 0 or viewport.Y <= 0 then return end
+        main.Size = UDim2.fromOffset(math.min(width, math.max(240, viewport.X - 24)),
+            minimized and 30 or math.min(height, math.max(220, viewport.Y - 48)))
+        if main.Position.Y.Scale ~= 1 then
+            local x = main.Position.X.Scale * viewport.X + main.Position.X.Offset
+            local y = main.Position.Y.Scale * viewport.Y + main.Position.Y.Offset
+            main.Position = UDim2.fromOffset(math.clamp(x, 0, math.max(0, viewport.X - main.Size.X.Offset)),
+                math.clamp(y, 0, math.max(0, viewport.Y - main.Size.Y.Offset)))
+        end
+    end
+    local viewportConnection
+    local function watchViewport()
+        if viewportConnection then viewportConnection:Disconnect() end
+        local camera = workspace.CurrentCamera
+        if camera then viewportConnection = connect(camera:GetPropertyChangedSignal("ViewportSize"), fitViewport) end
+        fitViewport()
+    end
+    connect(workspace:GetPropertyChangedSignal("CurrentCamera"), watchViewport)
+    watchViewport()
 
     local mainStroke = Instance.new("UIStroke")
     mainStroke.Color = Theme.Border
@@ -1303,7 +1607,7 @@ function Library:CreateWindow(title, options)
     titleLabel.TextColor3 = Theme.Text
     titleLabel.BackgroundTransparency = 1
     titleLabel.Position = UDim2.new(0, 12, 0, 0)
-    titleLabel.Size = UDim2.new(1, -60, 1, 0)
+    titleLabel.Size = UDim2.new(1, -85, 1, 0)
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.Parent = titleBar
 
@@ -1312,7 +1616,7 @@ function Library:CreateWindow(title, options)
     closeButton.Name = "TerminateButton"
     closeButton.Size = UDim2.new(0, 22, 0, 22)
     closeButton.Position = UDim2.new(1, -28, 0, 4)
-    closeButton.Text = "✕"
+    closeButton.Text = "X"
     closeButton.Font = Enum.Font.GothamBold
     closeButton.TextSize = 13
     closeButton.BackgroundColor3 = Theme.Close
@@ -1340,6 +1644,26 @@ function Library:CreateWindow(title, options)
     body.Position = UDim2.new(0, 0, 0, 30)
     body.BackgroundTransparency = 1
     body.Parent = main
+    local minimizeButton = Instance.new("TextButton")
+    minimizeButton.Name = "MinimizeButton"
+    minimizeButton.Size = UDim2.fromOffset(22, 22)
+    minimizeButton.Position = UDim2.new(1, -54, 0, 4)
+    minimizeButton.Text = "-"
+    minimizeButton.TextSize = 16
+    minimizeButton.Font = Enum.Font.GothamBold
+    minimizeButton.TextColor3 = Theme.Text
+    minimizeButton.BackgroundColor3 = Theme.Input
+    minimizeButton.BorderSizePixel = 0
+    minimizeButton.Parent = titleBar
+    round(minimizeButton, 3)
+    local function setMinimized(value)
+        if not alive then return end
+        minimized = not not value
+        body.Visible = not minimized
+        minimizeButton.Text = minimized and "+" or "-"
+        fitViewport()
+    end
+    connect(minimizeButton.MouseButton1Click, function() setMinimized(not minimized) end)
 
     local bodyPad = Instance.new("UIPadding")
     bodyPad.PaddingTop = UDim.new(0, 8)
@@ -1349,9 +1673,14 @@ function Library:CreateWindow(title, options)
     bodyPad.Parent = body
 
     -- Tab bar
-    local tabBar = Instance.new("Frame")
-    tabBar.Size = UDim2.new(1, 0, 0, 22)
+    local tabBar = Instance.new("ScrollingFrame")
+    tabBar.Size = UDim2.new(1, 0, 0, 28)
     tabBar.BackgroundTransparency = 1
+    tabBar.BorderSizePixel = 0
+    tabBar.ScrollBarThickness = 3
+    tabBar.ScrollingDirection = Enum.ScrollingDirection.X
+    tabBar.AutomaticCanvasSize = Enum.AutomaticSize.X
+    tabBar.CanvasSize = UDim2.new()
     tabBar.Parent = body
 
     local tabLayout = Instance.new("UIListLayout")
@@ -1362,8 +1691,8 @@ function Library:CreateWindow(title, options)
 
     -- Content
     local tabContent = Instance.new("Frame")
-    tabContent.Size = UDim2.new(1, 0, 1, -26)
-    tabContent.Position = UDim2.new(0, 0, 0, 26)
+    tabContent.Size = UDim2.new(1, 0, 1, -32)
+    tabContent.Position = UDim2.new(0, 0, 0, 32)
     tabContent.BackgroundTransparency = 1
     tabContent.Parent = body
 
@@ -1475,9 +1804,15 @@ function Library:CreateWindow(title, options)
             if not alive or not dragging or input ~= dragInput then return end
             if not dragStart or not startPos then return end
             local delta = input.Position - dragStart
+            local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize
+            local x = startPos.X.Scale * (viewport and viewport.X or 0) + startPos.X.Offset + delta.X
+            local y = startPos.Y.Scale * (viewport and viewport.Y or 0) + startPos.Y.Offset + delta.Y
+            if viewport then
+                x = math.clamp(x, 0, math.max(0, viewport.X - target.AbsoluteSize.X))
+                y = math.clamp(y, 0, math.max(0, viewport.Y - target.AbsoluteSize.Y))
+            end
             target.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+                0, x, 0, y
             )
         end)
     end
@@ -1487,6 +1822,7 @@ function Library:CreateWindow(title, options)
     -- ------------------ Destroy (nuke everything) ------------------
     local function destroyWindow()
         if destroyed then return end
+        if configAutoSave then saveConfig(true) end
         destroyed = true
         alive = false
         generation = generation + 1
@@ -1515,7 +1851,7 @@ function Library:CreateWindow(title, options)
     connect(closeButton.MouseButton1Click, destroyWindow)
 
     connect(UIS.InputBegan, function(input, gameProcessed)
-        if gameProcessed or not alive then return end
+        if gameProcessed or not alive or UIS:GetFocusedTextBox() then return end
         if input.KeyCode == toggleKey then
             screenGui.Enabled = not screenGui.Enabled
         end
@@ -1524,7 +1860,7 @@ function Library:CreateWindow(title, options)
     trackTween(TweenService:Create(
         main,
         TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-        { Position = UDim2.new(0.5, -math.floor(width / 2), 0.5, -math.floor(height / 2)) }
+        { Position = UDim2.new(0.5, -math.floor(main.Size.X.Offset / 2), 0.5, -math.floor(main.Size.Y.Offset / 2)) }
     )):Play()
 
     -- ------------------ Tabs ------------------
@@ -1548,6 +1884,9 @@ function Library:CreateWindow(title, options)
 
     -- ------------------ Window object ------------------
     local window = {}
+    function window:GetGui() return screenGui end
+    function window:SetMinimized(value) setMinimized(value) end
+    function window:IsMinimized() return minimized end
 
     function window:Folder(name)
         local folderName = tostring(name or "Tab")
@@ -1599,6 +1938,7 @@ function Library:CreateWindow(title, options)
         end
 
         local ctx = {
+            theme = Theme,
             alive = isAlive,
             connect = connect,
             folderName = folderName,
@@ -1694,7 +2034,9 @@ function Library:CreateWindow(title, options)
         return true
     end
 
-    notify(string.format("%s loaded successfully!", tostring(title or "SmugLib")), 2.5)
+    if not options.SuppressLoadNotification then
+        notify(string.format("%s loaded successfully!", tostring(title or "SmugLib")), 2.5)
+    end
     return window
 end
 
@@ -1716,4 +2058,5 @@ function Library:DestroyAll()
     end
 end
 
+awaitKeyforge()
 return Library
