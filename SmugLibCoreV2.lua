@@ -42,7 +42,7 @@ end
 -- Keyforge gate: loading this module yields until the current account verifies.
 -- Place the library load before any protected code or task.spawn in the caller.
 -- Change this URL when moving Keyforge from local development to HTTPS hosting.
-local KEYFORGE_URL = "http://localhost:3000"
+local KEYFORGE_URL = "https://keyforge.smughub.workers.dev/"
 local function awaitKeyforge()
     local Players = game:GetService("Players")
     local player = Players.LocalPlayer
