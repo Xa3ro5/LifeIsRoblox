@@ -1,43 +1,91 @@
-local Library = loadstring(game:HttpGet("https://pastebin.com/raw/CkVW0eJZ"))()
+-- ================= GLOBAL REGISTRY (survives reload) =================
+local env = (typeof(getgenv) == "function" and getgenv()) or _G
 
-local window = Library:CreateWindow("Gangsta | TWW", {
+if env.GameOfChoice then
+    local old = env.GameOfChoice
+    for name in pairs(old.flags) do
+        old.flags[name] = false
+    end
+    pcall(function()
+        if old.win and old.win.Kill then old.win:Kill() end
+    end)
+    pcall(function()
+        if old.gui and old.gui.Parent then old.gui:Destroy() end
+    end)
+    task.wait(0.15)
+    env.GameOfChoice = nil
+end
+
+local state = { flags = {}, gui = nil, win = nil }
+env.GameOfChoice = state
+
+local SMUGLIB_URLS = {
+    "https://raw.githubusercontent.com/Xa3ro5/LifeIsRoblox/refs/heads/main/SmugLibCoreV2.lua",
+    "https://pastebin.com/raw/CkVW0eJZ"
+}
+local Library
+do
+    for _, url in ipairs(SMUGLIB_URLS) do
+        -- Executors can retain an old raw-GitHub response across executions.
+        local freshUrl = url .. "?smuglib=" .. game:GetService("HttpService"):GenerateGUID(false)
+        local ok, source = pcall(game.HttpGet, game, freshUrl, true)
+        if ok and type(source) == "string" and source ~= "" then
+            if not source:find("-- Keyforge gate:", 1, true)
+                or not source:find("SmugLibKeyforgeKeys", 1, true) then
+                warn("[Keyforge] Nahraj aktualni SmugLibCoreV2 na vzdaleny zdroj.")
+                return
+            end
+            local compile = loadstring(source)
+            if compile then
+                local ran, lib = pcall(compile)
+                if not ran then warn(tostring(lib)) return end
+                if ran and type(lib) == "table" then Library = lib break end
+            end
+        end
+    end
+    if not Library then warn("[TWW] Failed to load SmugLibV2") return end
+end
+
+local win = Library:CreateWindow("My UI", {
     Width = 620,
     Height = 460,
     ToggleKey = Enum.KeyCode.RightShift,
+    ConfigKey = "main",
+    ConfigAutoSave = true,
 })
 
-local main = window:Folder("main")
+local tab = win:Folder("main")
+local sec = tab:Section("legit")
 
--- Sekce "legit" jako v obrázku
-local legit = main:Section("legit")
-legit:Toggle("aimbot", function(on) print("aimbot", on) end, false, Enum.KeyCode.M2)
-legit:Checkbox("visible check", function(on) end, true)
-legit:Checkbox("apply prediction", function(on) end, false)
-legit:Slider("smoothing [mouse]", 0, 20, 0, function(v) end)
-legit:Dropdown("hitbox priority", {"Head", "Torso", "Random"}, function(v) end, "Head")
-legit:Dropdown("mode", {"Camera", "Mouse"}, function(v) end, "Camera")
+sec:Label("utility")
+sec:Separator("bindings")
 
-local br = main:Section("bullet redirection")
-br:Checkbox("silent aim", function(on) end, false)
-br:Checkbox("apply prediction", function(on) end, false)
-br:Checkbox("custom prediction", function(on) end, false)
-br:Slider("value", 0, 100, 75, function(v) end)
-br:Dropdown("hitbox priority", {"Head", "Torso"}, function(v) end, "Head")
+sec:Toggle("Aimbot", function(on)
+    print("[aimbot]", on)
+end, false, Enum.KeyCode.E)
 
-local tb = main:Section("trigger bot")
-tb:Checkbox("enabled", function(on) end, false, Enum.KeyCode.M)
-tb:Slider("delay", 0, 5, 0, function(v) end)
+sec:Slider("FOV", 0, 360, 90, function(v)
+    print("[fov]", v)
+end, 5)
 
-local rage = window:Folder("rage")
-local draws = rage:Section("drawing field of view")
-draws:Checkbox("aimbot fov", function(on) end, false)
-draws:Slider("size", 0, 250, 100, function(v) end)
-draws:Checkbox("silent aim fov", function(on) end, false)
-draws:Slider("size", 0, 250, 100, function(v) end)
-draws:Dropdown("style", {"Outline", "Fill"}, function(v) end, "Outline")
-draws:Dropdown("position", {"Mouse", "Center"}, function(v) end, "Mouse")
+sec:Slider("Smoothing", 0, 20, 0, function(v)
+    print("[smoothing]", v)
+end, 1)
 
--- Multi-select dropdown
-main:Section("misc"):Checklist("features", {"A", "B", "C", "D"}, function(list)
-    print(table.concat(list, ", "))
-end, {"A"})
+sec:Dropdown("Mode", {"Camera", "Mouse", "Silent"}, function(v)
+    print("[mode]", v)
+end, "Camera")
+
+sec:Textbox("Webhook URL...", function(text, enterPressed)
+    print("[webhook]", text, enterPressed)
+end, "")
+
+sec:Checklist("ESP elements", {"Box", "Name", "Health", "Tracer"}, function(list)
+    print("[esp]", table.concat(list, ", "))
+end, {"Box", "Name"})
+
+sec:Bind("Panic", Enum.KeyCode.P, function()
+    win:Kill()
+end)
+
+win:Notify("Loaded successfully. Press RShift to toggle.", 3)
