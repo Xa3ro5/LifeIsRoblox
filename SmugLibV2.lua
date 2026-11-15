@@ -32,7 +32,7 @@ do
         if ok and type(source) == "string" and source ~= "" then
             if not source:find("-- Keyforge gate:", 1, true)
                 or not source:find("SmugLibKeyforgeKeys", 1, true) then
-                warn("[Keyforge] Nahraj aktualni SmugLibCoreV2 na vzdaleny zdroj.")
+                warn("[KeyForge] Make sure you use the latest SmugLibCoreV2 to the remote source.")
                 return
             end
             local compile = loadstring(source)
@@ -43,7 +43,7 @@ do
             end
         end
     end
-    if not Library then warn("[TWW] Failed to load SmugLibV2") return end
+    if not Library then warn("[SmugLib] Failed to load SmugLibV2") return end
 end
 
 local win = Library:CreateWindow("My UI", {
@@ -53,6 +53,8 @@ local win = Library:CreateWindow("My UI", {
     ConfigKey = "main",
     ConfigAutoSave = true,
 })
+state.win = win
+state.gui = type(win.GetGui) == "function" and win:GetGui() or nil
 
 local tab = win:Folder("main")
 local sec = tab:Section("legit")
@@ -83,6 +85,39 @@ end, "")
 sec:Checklist("ESP elements", {"Box", "Name", "Health", "Tracer"}, function(list)
     print("[esp]", table.concat(list, ", "))
 end, {"Box", "Name"})
+
+-- TableWindow: combine as many independent rows as needed in one floating panel.
+local tableExample = tab:Section("Universal table example")
+if type(win.TableWindow) == "function" then
+    local dashboard = win:TableWindow("Session", {Width = 300, Height = 280})
+    local statusLine = dashboard:AddLabel("Ready")
+    local counter = dashboard:AddValue("Items", 0)
+    local progress = dashboard:AddProgress("Storage", 0)
+    dashboard:AddSeparator("Controls")
+    local count = 0
+    dashboard:AddButton("Add item", function()
+        count = count + 1
+        counter:SetValue(count)
+        progress:SetProgress(math.min(count / 10, 1))
+        statusLine:SetText("Last action: added an item")
+    end)
+    local toggle = dashboard:AddToggle("Notifications", true, function(enabled)
+        statusLine:SetText(enabled and "Notifications on" or "Notifications off")
+    end)
+    tableExample:Toggle("Show universal table", function(on) dashboard:SetVisible(on) end, true)
+    tableExample:Button("Reset example", function()
+        count = 0
+        counter:SetValue(0)
+        progress:SetProgress(0)
+        toggle:SetValue(true, false) -- false suppresses the change callback.
+        statusLine:SetText("Ready")
+    end)
+    -- dashboard:AddPreview(modelOrPart, 120) makes a rotating clone.
+    -- row:SetVisible(false), row:SetOrder(2), row:Destroy(), dashboard:Clear().
+    -- dashboard:SetTitle("New title"), dashboard:SetMinimized(true), dashboard:Destroy().
+else
+    tableExample:Label("Update SmugLibCoreV2 to use TableWindow.")
+end
 
 sec:Bind("Panic", Enum.KeyCode.P, function()
     win:Kill()
